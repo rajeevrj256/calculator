@@ -62,7 +62,8 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
             continue
 
         progress(f"{tag} Recording voiceover")
-        scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio")
+        scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio",
+                                   cfg.tts_engine, cfg.kokoro_voice)
         progress(f"{tag} Downloading footage")
         backgrounds = fetch_backgrounds([s.visual_queries for s in script.scenes], cfg.pexels_api_key,
                                         cfg.width, cfg.height, run_dir / "backgrounds")
