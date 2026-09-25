@@ -46,11 +46,12 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
     run_dir.mkdir(parents=True, exist_ok=True)
 
     feedback = ""
+    script = None
     best: dict | None = None
     for attempt in range(1, cfg.max_attempts + 1):
         tag = f"[attempt {attempt}/{cfg.max_attempts}]"
         progress(f"{tag} Claude is picking the topic and writing the script")
-        script = write_script(cfg, candidates, feedback)
+        script = write_script(cfg, candidates, feedback, previous=script if feedback else None)
         if not topic:  # keep later attempts on the chosen topic
             candidates = [c for c in candidates if c.title.lower() == script.topic.lower()] or candidates
 

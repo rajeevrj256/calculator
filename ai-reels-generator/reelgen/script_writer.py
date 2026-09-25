@@ -71,7 +71,8 @@ Skip tragedies, deaths, violence, explicit content, and divisive political fight
 candidates are fallbacks — prefer a real trend when a good one exists."""
 
 
-def write_script(cfg: Config, candidates: list[Trend], feedback: str = "") -> ReelScript:
+def write_script(cfg: Config, candidates: list[Trend], feedback: str = "",
+                 previous: ReelScript | None = None) -> ReelScript:
     niche = f"\nChannel niche: {cfg.niche}. Prefer topics that fit it." if cfg.niche else ""
     words = int(cfg.target_seconds * 2.6)  # ~155 spoken words per minute
     prompt = (
@@ -83,8 +84,11 @@ def write_script(cfg: Config, candidates: list[Trend], feedback: str = "") -> Re
         f"- 6 to 9 scenes."
     )
     if feedback:
-        prompt += (f"\n\nA reviewer rejected the previous draft for these reasons — fix all of them "
-                   f"(you may keep the same topic):\n{feedback}")
+        prompt += f"\n\nA reviewer rejected the previous draft. Fix every point:\n{feedback}"
+        if previous is not None:
+            prompt += (f"\n\nThe rejected draft:\n{previous.model_dump_json(indent=1)}\n"
+                       "Rewrite the lines the reviewer flagged — don't reuse a flagged claim in softer "
+                       "words; replace it with one that is clearly true, or drop it.")
 
     script = ask(cfg.ai_backend, cfg.claude_model, SYSTEM_PROMPT, prompt, ReelScript, allow_web=True)
     log.info("Chosen topic: %s (%s)", script.topic, script.why_chosen)
