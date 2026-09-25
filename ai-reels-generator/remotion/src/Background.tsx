@@ -40,6 +40,8 @@ export const Background: React.FC<{cuts: Cut[]; sceneStarts: number[]}> = ({cuts
             'linear-gradient(to bottom, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.18) 28%, rgba(0,0,0,0.22) 48%, rgba(0,0,0,0.6) 72%, rgba(0,0,0,0.78) 100%)',
         }}
       />
+      <Vignette />
+      <Grain />
       {sceneStarts.slice(1).map((t, i) => (
         <Sequence key={i} name={`flash ${i + 2}`} from={Math.round(t * fps)} durationInFrames={10}>
           <Flash />
@@ -99,6 +101,44 @@ const Placeholder: React.FC<{index: number; style: React.CSSProperties}> = ({ind
       style={{
         ...style,
         background: `radial-gradient(ellipse 80% 45% at 50% ${glowY}%, rgba(255,255,255,0.10), transparent 70%), linear-gradient(${angle}deg, ${a}, ${b})`,
+      }}
+    />
+  );
+};
+
+// Film look from the "claude code remotion" project's grade (effects/GradeLayer):
+// a vignette plus grain. The grain is a noise tile baked once and *moved* each
+// frame, because regenerating feTurbulence per frame is slow. It makes stock
+// clips from different sources read as one shoot and less like raw stock.
+const GRAIN_TILE = `url("data:image/svg+xml;utf8,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180">
+     <filter id="n">
+       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+       <feColorMatrix type="saturate" values="0"/>
+     </filter>
+     <rect width="180" height="180" filter="url(#n)"/>
+   </svg>`,
+)}")`;
+
+const Vignette: React.FC = () => (
+  <Layer
+    name="vignette"
+    style={{background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.42) 100%)'}}
+  />
+);
+
+const Grain: React.FC = () => {
+  const frame = useCurrentFrame();
+  return (
+    <Layer
+      name="film-grain"
+      style={{
+        backgroundImage: GRAIN_TILE,
+        backgroundRepeat: 'repeat',
+        // Deterministic per frame, so re-rendering gives an identical video.
+        backgroundPosition: `${(frame * 37) % 180}px ${(frame * 71) % 180}px`,
+        mixBlendMode: 'overlay',
+        opacity: 0.14,
       }}
     />
   );

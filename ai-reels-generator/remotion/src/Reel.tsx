@@ -97,7 +97,9 @@ export const Reel: React.FC<ReelProps> = ({title, scenes, cuts, captions, music,
   );
 };
 
-// Thin yellow bar along the bottom edge with a glowing head.
+// Thin yellow bar along the top edge with a glowing head. Top, not bottom: on
+// Reels/Shorts the bottom of the frame sits under the platform's caption and
+// buttons (same rule as the "claude code remotion" explainer project).
 const ProgressBar: React.FC<{total: number}> = ({total}) => {
   const frame = useCurrentFrame();
   const progress = interpolate(frame, [0, total - 1], [0, 1], clamp);
@@ -108,7 +110,7 @@ const ProgressBar: React.FC<{total: number}> = ({total}) => {
         style={{
           position: 'absolute',
           left: 0,
-          bottom: 0,
+          top: 0,
           height: 12,
           width: `${progress * 100}%`,
           background: COLORS.accent,

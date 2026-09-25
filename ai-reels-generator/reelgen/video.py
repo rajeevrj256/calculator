@@ -204,6 +204,11 @@ def _render_remotion(cli: Path, props: dict, out_path: Path) -> None:
            f"--props={props_path}", f"--public-dir={public_dir}",
            # bt709 tags the file as standard TV-range colour, so phones don't show it washed out.
            "--codec=h264", "--crf=18", "--color-space=bt709", "--overwrite"]
+    # Remotion downloads its own headless Chrome on first render. Where that
+    # download is blocked, REEL_CHROME can point at an installed Chrome/Chromium.
+    chrome = os.environ.get("REEL_CHROME", "").strip()
+    if chrome:
+        cmd += [f"--browser-executable={chrome}", "--chrome-mode=chrome-for-testing"]
     log.info("Rendering with Remotion: %s", " ".join(cmd))
     proc = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
