@@ -1,52 +1,107 @@
-"""End-to-end run: trends -> script -> voice -> visuals -> video -> notify."""
+"""End-to-end run: trends -> script -> voice -> visuals -> video -> verify -> notify.
+
+A video that fails verification is regenerated with the reviewer's feedback, up
+to `cfg.max_attempts` times. If every attempt fails, the best one is still
+delivered but marked as not verified so you can decide.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
 import re
+import shutil
 from datetime import datetime, timezone
-from pathlib import Path
+from typing import Callable
 
 from .config import Config
 from .notifier import notify
-from .script_writer import ReelScript, write_script
-from .trends import collect_trends, load_history, save_history
+from .script_writer import write_script
+from .trends import Trend, collect_trends, load_history, save_history
+from .verify import VerifyResult, check_script, check_video, review_with_claude
 from .video import render_video
 from .visuals import fetch_backgrounds
 from .voice import synthesize_scenes
 
 log = logging.getLogger(__name__)
 
+Progress = Callable[[str], None]
+
 
 def slugify(text: str, max_len: int = 40) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:max_len] or "reel"
 
 
-def run_once(cfg: Config, topic: str | None = None) -> dict:
+def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.info) -> dict:
     history_path = cfg.output_dir / "history.json"
 
+    progress("Finding trending topics")
     if topic:
-        from .trends import Trend
         candidates = [Trend(title=topic, source="manual")]
     else:
         candidates = collect_trends(cfg.geo, load_history(history_path))
-    log.info("%d candidate topics", len(candidates))
-
-    script: ReelScript = write_script(cfg, candidates)
-    source = next((c.source for c in candidates if c.title.lower() == script.topic.lower()), "unknown")
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    run_dir = cfg.output_dir / f"{stamp}-{slugify(script.topic)}"
+    run_dir = cfg.output_dir / f"{stamp}-working"
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
 
-    scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio")
-    backgrounds = fetch_backgrounds([s.visual_query for s in script.scenes], cfg.pexels_api_key,
-                                    cfg.width, cfg.height, run_dir / "backgrounds")
-    rendered = render_video(script.title, scenes, backgrounds, cfg, run_dir / "reel.mp4")
+    feedback = ""
+    best: dict | None = None
+    for attempt in range(1, cfg.max_attempts + 1):
+        tag = f"[attempt {attempt}/{cfg.max_attempts}]"
+        progress(f"{tag} Claude is picking the topic and writing the script")
+        script = write_script(cfg, candidates, feedback)
+        if not topic:  # keep later attempts on the chosen topic
+            candidates = [c for c in candidates if c.title.lower() == script.topic.lower()] or candidates
 
+        verdict = check_script(script, cfg)
+        if not verdict.passed:
+            progress(f"{tag} Script rejected: {'; '.join(verdict.issues)}")
+            feedback = "\n".join(verdict.issues)
+            continue
+
+        progress(f"{tag} Recording voiceover")
+        scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio")
+        progress(f"{tag} Downloading footage")
+        backgrounds = fetch_backgrounds([s.visual_queries for s in script.scenes], cfg.pexels_api_key,
+                                        cfg.width, cfg.height, run_dir / "backgrounds")
+        progress(f"{tag} Editing the video (takes a few minutes)")
+        rendered = render_video(script.title, scenes, backgrounds, cfg, run_dir / "reel.mp4")
+
+        progress(f"{tag} Verifying video quality")
+        verdict = check_video(run_dir / "reel.mp4", scenes, script, cfg)
+        if verdict.passed:
+            progress(f"{tag} Claude is reviewing the finished video")
+            stock = any(p.suffix == ".mp4" for clips in backgrounds for p in clips)
+            _, review = review_with_claude(run_dir / "reel.mp4", script, cfg, stock_footage=stock)
+            verdict = _merge(verdict, review)
+
+        attempt_result = {"script": script, "rendered": rendered, "verdict": verdict, "attempt": attempt}
+        if best is None or (verdict.score or 0) >= (best["verdict"].score or 0):
+            best = attempt_result
+            # Keep the best attempt's files; later attempts render into a scratch copy.
+            _snapshot(run_dir)
+
+        if verdict.passed:
+            progress(f"{tag} Passed verification (score {verdict.score})")
+            break
+        progress(f"{tag} Failed verification: {'; '.join(verdict.issues)}")
+        review = verdict.checks.get("review", {})
+        feedback = "\n".join(verdict.issues + ([review["fix_instructions"]] if review.get("fix_instructions") else []))
+
+    if best is None:
+        shutil.rmtree(run_dir, ignore_errors=True)
+        raise RuntimeError(f"No usable script after {cfg.max_attempts} attempts: {feedback}")
+
+    _restore_snapshot(run_dir)
+    final_dir = cfg.output_dir / f"{stamp}-{slugify(best['script'].topic)}"
+    run_dir.rename(final_dir)
+    script, verdict = best["script"], best["verdict"]
+    (final_dir / "script.json").write_text(script.model_dump_json(indent=2), encoding="utf-8")
+
+    source = next((c.source for c in candidates if c.title.lower() == script.topic.lower()), "manual" if topic else "unknown")
     report = {
+        "id": final_dir.name,
         "topic": script.topic,
         "topic_source": source,
         "why_chosen": script.why_chosen,
@@ -55,22 +110,55 @@ def run_once(cfg: Config, topic: str | None = None) -> dict:
         "caption": script.caption,
         "hashtags": [h.lstrip("#") for h in script.hashtags],
         "narration": " ".join(s.narration for s in script.scenes),
+        "facts_checked": script.facts_checked,
         "created_at": stamp,
-        **rendered,
+        "verified": verdict.passed,
+        "score": verdict.score,
+        "issues": verdict.issues,
+        "checks": verdict.checks,
+        "attempts": best["attempt"],
+        **{k: str(final_dir / v) for k, v in (("video", "reel.mp4"), ("thumbnail", "thumbnail.jpg"))},
+        "duration_seconds": best["rendered"]["duration_seconds"],
     }
-    (run_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    (final_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     save_history(history_path, script.topic)
 
     notify(report, cfg.telegram_bot_token, cfg.telegram_chat_id)
+    progress("Done" if report["verified"] else "Done, but it did not pass every check — review before posting")
     return report
 
 
-def run(cfg: Config, count: int = 1, topic: str | None = None) -> list[dict]:
+def _merge(a: VerifyResult, b: VerifyResult) -> VerifyResult:
+    return VerifyResult(passed=a.passed and b.passed, score=b.score, issues=a.issues + b.issues,
+                        checks={**a.checks, **b.checks})
+
+
+def _snapshot(run_dir) -> None:
+    best = run_dir / "_best"
+    shutil.rmtree(best, ignore_errors=True)
+    best.mkdir()
+    for name in ("reel.mp4", "thumbnail.jpg", "review_frames.jpg"):
+        if (run_dir / name).exists():
+            shutil.copy2(run_dir / name, best / name)
+
+
+def _restore_snapshot(run_dir) -> None:
+    best = run_dir / "_best"
+    if best.exists():
+        for f in best.iterdir():
+            shutil.move(str(f), run_dir / f.name)
+        best.rmdir()
+    for scratch in ("audio", "backgrounds"):
+        shutil.rmtree(run_dir / scratch, ignore_errors=True)
+
+
+def run(cfg: Config, count: int = 1, topic: str | None = None, progress: Progress = log.info) -> list[dict]:
     reports = []
     for i in range(count):
-        log.info("=== Video %d/%d ===", i + 1, count)
+        progress(f"=== Video {i + 1}/{count} ===")
         try:
-            reports.append(run_once(cfg, topic))
-        except Exception:
+            reports.append(run_once(cfg, topic, progress))
+        except Exception as exc:
             log.exception("Video %d failed", i + 1)
+            progress(f"Video {i + 1} failed: {exc}")
     return reports

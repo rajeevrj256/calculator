@@ -13,10 +13,16 @@ log = logging.getLogger(__name__)
 TELEGRAM_VIDEO_LIMIT = 50 * 1024 * 1024  # Bot API upload limit
 
 
+def verification_line(report: dict) -> str:
+    if report.get("verified"):
+        return f"✅ Verified (score {report.get('score')}/10)"
+    return "⚠️ Not verified — check before posting: " + "; ".join(report.get("issues", []))[:400]
+
+
 def format_message(report: dict) -> str:
     tags = " ".join(f"#{h}" for h in report["hashtags"])
     return (
-        f"🎬 New reel ready\n\n"
+        f"🎬 New reel ready\n{verification_line(report)}\n\n"
         f"Topic: {report['topic']} ({report['topic_source']})\n"
         f"Why: {report['why_chosen']}\n"
         f"Length: {report['duration_seconds']}s\n\n"
@@ -58,6 +64,7 @@ def write_github_summary(report: dict) -> None:
         fh.write(
             f"## 🎬 {report['title']}\n\n"
             f"| | |\n|---|---|\n"
+            f"| Check | {verification_line(report)} |\n"
             f"| Topic | {report['topic']} ({report['topic_source']}) |\n"
             f"| Why | {report['why_chosen']} |\n"
             f"| Length | {report['duration_seconds']}s |\n"

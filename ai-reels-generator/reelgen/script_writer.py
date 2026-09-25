@@ -1,77 +1,91 @@
-"""Use Claude to pick the best trending topic and write a short-form video script."""
+"""Claude picks the best trending topic and writes a short-form video script
+that sounds like a real creator talking, not an AI."""
 
 from __future__ import annotations
 
 import logging
 
-import anthropic
 from pydantic import BaseModel, Field
 
 from .config import Config
+from .llm import ask
 from .trends import Trend, trends_as_json
 
 log = logging.getLogger(__name__)
 
+# Phrases that instantly mark a video as AI-made. The writer is told to avoid
+# them and the verifier rejects scripts that still contain them.
+AI_CLICHES = [
+    "did you know", "let's dive in", "dive into", "delve", "in today's video", "in this video",
+    "buckle up", "mind-blowing", "mind blowing", "game-changer", "game changer", "unlock the secrets",
+    "the world of", "fascinating world", "embark on", "journey", "tapestry", "testament to",
+    "whether you're", "stay tuned", "without further ado", "let that sink in", "here's the kicker",
+    "but here's the thing", "in conclusion", "ever wondered", "have you ever wondered",
+    "smash that like", "you won't believe",
+]
+
 
 class Scene(BaseModel):
-    narration: str = Field(description="What the voiceover says in this scene. 1-2 short spoken sentences.")
-    visual_query: str = Field(description="2-4 word English stock-footage search query that matches this scene visually, e.g. 'city night traffic'.")
+    narration: str = Field(description="What the voiceover says in this scene: 1-2 short spoken sentences.")
+    visual_queries: list[str] = Field(description="2-3 different English stock-footage search queries (2-4 words each) for quick cuts inside this scene, concrete and filmable, e.g. 'hands counting cash', 'mumbai street night'.")
 
 
 class ReelScript(BaseModel):
-    topic: str = Field(description="The trending topic you chose, exactly as given in the candidate list.")
-    why_chosen: str = Field(description="One sentence on why this topic will perform well as a short video.")
-    title: str = Field(description="Punchy on-screen title shown during the hook, max 6 words.")
-    scenes: list[Scene] = Field(description="Scenes in order. The first scene is the hook.")
-    caption: str = Field(description="Instagram/YouTube caption, 1-3 lines, may include emojis.")
-    hashtags: list[str] = Field(description="8-15 relevant hashtags without the # sign.")
+    topic: str = Field(description="The trending topic you chose, exactly as written in the candidate list.")
+    why_chosen: str = Field(description="One sentence on why this topic will perform well now.")
+    facts_checked: str = Field(description="The key facts the script relies on and where they come from (a source you looked up, or 'general knowledge').")
+    title: str = Field(description="On-screen hook text for the first 2 seconds, max 6 words, written like a creator would type it.")
+    scenes: list[Scene] = Field(description="Scenes in order. Scene 1 is the hook.")
+    caption: str = Field(description="Instagram/YouTube caption: 1-3 casual lines, at most 2 emojis.")
+    hashtags: list[str] = Field(description="8-12 relevant hashtags without the # sign; mix broad and niche.")
     youtube_title: str = Field(description="YouTube Shorts title, max 90 characters, ends with #shorts.")
 
 
-SYSTEM_PROMPT = """You are a head writer for a faceless short-form video channel that posts \
-Instagram Reels and YouTube Shorts. Your videos are "sticky": viewers stop scrolling in the \
-first second and watch to the end.
+SYSTEM_PROMPT = f"""You write for a faceless short-form channel (Instagram Reels, YouTube Shorts). \
+Your scripts sound like a sharp human creator talking to a friend — never like an AI or a \
+documentary narrator. Viewers stop scrolling in the first second and watch to the end.
 
-How you write:
-- Scene 1 is the hook: a bold claim, a surprising number, or a question that opens a curiosity \
-gap. Never start with greetings or "In this video".
-- Every following scene adds a new fact, twist, or payoff. Short spoken sentences, no filler.
-- Keep the open loop until near the end, then pay it off.
-- The last scene is a quick call to action (follow / comment) that ties back to the topic.
-- Write for the ear: it is read aloud by a text-to-speech voice, so avoid abbreviations, \
-URLs, emojis, and symbols in the narration.
-- Stay factual. If a trend is a breaking news story you have no reliable details on, explain \
-the background people are searching for instead of inventing details.
+Voice:
+- Conversational. Contractions, plain words, the occasional "honestly" or "okay so".
+- Mix very short sentences with normal ones. One idea per sentence.
+- Specific beats generic: real numbers, names, places, dates.
+- A point of view: say what's surprising or what people get wrong.
+- Never use these phrases: {", ".join(AI_CLICHES)}.
+- No lists of three adjectives, no rhetorical triplets, no "It's not just X, it's Y".
 
-Choosing a topic:
-- Pick the candidate with the broadest appeal that works as a 30-60 second explainer.
-- Skip tragedies, deaths, violence, explicit content, and divisive political fights.
-- Evergreen candidates are fallbacks; prefer a real trend when a good one exists."""
+Structure:
+- Scene 1 is the hook: a bold claim, a surprising number, or a sharp question — no greeting.
+- Each next scene adds a new fact or twist; keep an open loop until near the end.
+- Last scene pays it off, then a short natural call to action tied to the topic
+  (e.g. "Follow if you want part two"), not "like and subscribe".
+
+It is read by text-to-speech: no abbreviations, symbols, emojis, or URLs in narration; \
+write numbers the way they're spoken.
+
+Accuracy: only state facts you are confident about or have looked up. If a trend is breaking \
+news, check what actually happened first (use web search if you have it); if you can't confirm \
+details, explain the background people are searching for instead of guessing.
+
+Topic choice: pick the candidate with the broadest appeal that works as a 30-60 second video. \
+Skip tragedies, deaths, violence, explicit content, and divisive political fights. Evergreen \
+candidates are fallbacks — prefer a real trend when a good one exists."""
 
 
-def write_script(cfg: Config, candidates: list[Trend]) -> ReelScript:
-    client = anthropic.Anthropic()
+def write_script(cfg: Config, candidates: list[Trend], feedback: str = "") -> ReelScript:
     niche = f"\nChannel niche: {cfg.niche}. Prefer topics that fit it." if cfg.niche else ""
-    words = int(cfg.target_seconds * 2.5)  # ~150 spoken words per minute
+    words = int(cfg.target_seconds * 2.6)  # ~155 spoken words per minute
     prompt = (
         f"Candidate topics trending right now (region {cfg.geo}):\n{trends_as_json(candidates)}\n"
         f"{niche}\n"
         f"Pick one topic and write the video.\n"
-        f"- Narration language: {cfg.language} (visual_query always in English).\n"
+        f"- Narration language: {cfg.language} (visual_queries always in English).\n"
         f"- Target length: about {cfg.target_seconds} seconds, roughly {words} spoken words in total.\n"
         f"- 6 to 9 scenes."
     )
+    if feedback:
+        prompt += (f"\n\nA reviewer rejected the previous draft for these reasons — fix all of them "
+                   f"(you may keep the same topic):\n{feedback}")
 
-    response = client.messages.parse(
-        model=cfg.claude_model,
-        max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
-        output_format=ReelScript,
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        raise RuntimeError(f"Claude did not return a script (stop_reason={response.stop_reason})")
-
-    script = response.parsed_output
+    script = ask(cfg.ai_backend, cfg.claude_model, SYSTEM_PROMPT, prompt, ReelScript, allow_web=True)
     log.info("Chosen topic: %s (%s)", script.topic, script.why_chosen)
     return script

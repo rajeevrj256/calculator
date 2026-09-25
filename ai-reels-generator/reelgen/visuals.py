@@ -20,8 +20,9 @@ PALETTES = [
 ]
 
 
-def pexels_video(query: str, api_key: str, out_path: Path, min_height: int = 1280) -> Path | None:
-    """Download a portrait stock clip matching `query`, or return None."""
+def pexels_video(query: str, api_key: str, out_path: Path, used_ids: set[int],
+                 min_height: int = 1280) -> Path | None:
+    """Download a portrait stock clip matching `query` not used yet in this video, or None."""
     resp = requests.get(
         "https://api.pexels.com/videos/search",
         params={"query": query, "orientation": "portrait", "size": "medium", "per_page": 8},
@@ -32,6 +33,8 @@ def pexels_video(query: str, api_key: str, out_path: Path, min_height: int = 128
     videos = resp.json().get("videos", [])
     random.shuffle(videos)
     for video in videos:
+        if video.get("id") in used_ids:
+            continue
         files = [f for f in video.get("video_files", [])
                  if f.get("file_type") == "video/mp4" and (f.get("height") or 0) >= min_height
                  and (f.get("width") or 0) < (f.get("height") or 0)]
@@ -44,6 +47,7 @@ def pexels_video(query: str, api_key: str, out_path: Path, min_height: int = 128
             with open(out_path, "wb") as fh:
                 for block in dl.iter_content(1 << 20):
                     fh.write(block)
+        used_ids.add(video.get("id"))
         return out_path
     return None
 
@@ -60,18 +64,24 @@ def gradient_image(width: int, height: int, out_path: Path, seed: int) -> Path:
     return out_path
 
 
-def fetch_backgrounds(queries: list[str], api_key: str, width: int, height: int, out_dir: Path) -> list[Path]:
-    """One background per scene. Returns .mp4 paths (stock) or .png paths (fallback)."""
+def fetch_backgrounds(scene_queries: list[list[str]], api_key: str, width: int, height: int,
+                      out_dir: Path) -> list[list[Path]]:
+    """Several clips per scene for quick cuts. Each entry is .mp4 (stock) or .png (fallback)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for i, query in enumerate(queries):
-        path = None
-        if api_key:
+    used_ids: set[int] = set()
+    result = []
+    for i, queries in enumerate(scene_queries):
+        clips = []
+        for j, query in enumerate(queries[:3]):
+            if not api_key:
+                break
             try:
-                path = pexels_video(query, api_key, out_dir / f"bg_{i:02d}.mp4")
+                path = pexels_video(query, api_key, out_dir / f"bg_{i:02d}_{j}.mp4", used_ids)
+                if path:
+                    clips.append(path)
             except Exception as exc:
                 log.warning("Pexels failed for %r: %s", query, exc)
-        if path is None:
-            path = gradient_image(width, height, out_dir / f"bg_{i:02d}.png", seed=i)
-        paths.append(path)
-    return paths
+        if not clips:
+            clips.append(gradient_image(width, height, out_dir / f"bg_{i:02d}.png", seed=i))
+        result.append(clips)
+    return result

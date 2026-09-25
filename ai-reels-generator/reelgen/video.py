@@ -26,7 +26,8 @@ from .voice import SceneAudio
 
 log = logging.getLogger(__name__)
 
-SCENE_PADDING = 0.2  # seconds of breathing room after each scene's narration
+# Breathing room after each scene's narration; varied so the pacing isn't robotic.
+SCENE_PADDING = (0.12, 0.35)
 TITLE_SECONDS = 2.8
 
 
@@ -37,17 +38,30 @@ def _fill_frame(clip, width: int, height: int):
     return clip.cropped(x_center=clip.w / 2, y_center=clip.h / 2, width=width, height=height)
 
 
-def _background(path: Path, duration: float, cfg: Config):
+def _background(path: Path, duration: float, cfg: Config, punch_in: bool):
     if path.suffix == ".mp4":
         clip = VideoFileClip(str(path), audio=False)
         clip = _fill_frame(clip, cfg.width, cfg.height)
+        if punch_in:  # editor-style tighter crop on alternate cuts
+            clip = _fill_frame(clip.resized(1.12), cfg.width, cfg.height)
         if clip.duration < duration:
             clip = clip.with_effects([vfx.Loop(duration=duration)])
-        return clip.subclipped(0, duration)
+            return clip.subclipped(0, duration)
+        start = random.uniform(0, max(0.0, clip.duration - duration) * 0.6)  # skip the stock intro
+        return clip.subclipped(start, start + duration)
     # Still image: slow Ken Burns zoom so the frame never feels static.
     clip = ImageClip(str(path)).with_duration(duration)
     clip = clip.resized(lambda t: 1 + 0.03 * t)
     return clip.with_position("center")
+
+
+def _scene_backgrounds(paths: list[Path], start: float, duration: float, cfg: Config, cut_index: int):
+    """Split one scene across its clips (quick cuts), returning clips placed on the timeline."""
+    clips = []
+    per_clip = duration / len(paths)
+    for i, path in enumerate(paths):
+        clips.append(_background(path, per_clip, cfg, punch_in=(cut_index + i) % 2 == 1).with_start(start + i * per_clip))
+    return clips
 
 
 def _progress_bar(total: float, cfg: Config, height: int = 14):
@@ -70,17 +84,19 @@ def _music(total: float, cfg: Config):
     return track.with_effects(effects).subclipped(0, total)
 
 
-def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[Path], cfg: Config,
+def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], cfg: Config,
                  out_path: Path) -> dict:
     bg_layers, caption_layers, audio_layers = [], [], []
     caption_width = cfg.width - 140
     caption_y = int(cfg.height * 0.60)
     t = 0.0
+    cuts = 0
 
-    for scene, bg_path in zip(scenes, backgrounds):
+    for scene, bg_paths in zip(scenes, backgrounds):
         voice = AudioFileClip(str(scene.path))
-        duration = voice.duration + SCENE_PADDING
-        bg_layers.append(_background(bg_path, duration, cfg).with_start(t))
+        duration = voice.duration + random.uniform(*SCENE_PADDING)
+        bg_layers.extend(_scene_backgrounds(bg_paths, t, duration, cfg, cuts))
+        cuts += len(bg_paths)
         audio_layers.append(voice.with_start(t))
         for cap in build_captions(scene.words, t, t + duration, caption_width, font_path=cfg.font_path):
             caption_layers.append(
@@ -116,6 +132,7 @@ def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[Path], 
         audio_codec="aac",
         preset="veryfast",
         threads=4,
+        temp_audiofile=str(out_path.with_name("_temp_audio.m4a")),  # keep temp files out of the cwd
         ffmpeg_params=["-pix_fmt", "yuv420p", "-movflags", "+faststart", "-crf", "21"],
         logger=None,
     )

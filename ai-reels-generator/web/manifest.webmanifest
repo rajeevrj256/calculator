@@ -1,0 +1,13 @@
+{
+  "name": "Reel Studio",
+  "short_name": "Reels",
+  "description": "AI-generated Reels and Shorts, made and stored on your own computer.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f12",
+  "theme_color": "#0f0f12",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

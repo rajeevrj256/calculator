@@ -31,8 +31,11 @@ def _env(name: str, default: str = "") -> str:
 
 @dataclass
 class Config:
-    # Claude writes the script and picks the topic.
-    claude_model: str = field(default_factory=lambda: _env("CLAUDE_MODEL", "claude-opus-5"))
+    # How to reach Claude: "auto" (Claude Code CLI if installed, else API),
+    # "claude-code" (your logged-in Claude Code, no API key) or "api".
+    ai_backend: str = field(default_factory=lambda: _env("REEL_AI_BACKEND", "auto"))
+    # Empty = Claude Code's default model / claude-opus-5 on the API.
+    claude_model: str = field(default_factory=lambda: _env("CLAUDE_MODEL"))
 
     # Stock footage (free key from https://www.pexels.com/api/). Optional:
     # without it the video uses animated gradient backgrounds.
@@ -55,6 +58,46 @@ class Config:
     height: int = 1920
     fps: int = 30
 
+    # Automatic quality check: how many times to regenerate a video that fails it.
+    max_attempts: int = field(default_factory=lambda: int(_env("REEL_MAX_ATTEMPTS", "3")))
+
+    # Local app (python -m reelgen serve).
+    port: int = field(default_factory=lambda: int(_env("REEL_PORT", "8765")))
+    app_pin: str = field(default_factory=lambda: _env("REEL_APP_PIN"))
+    # Daily auto-generation time in 24h local time, e.g. "08:30". Empty = off.
+    schedule_time: str = field(default_factory=lambda: _env("REEL_SCHEDULE"))
+
     output_dir: Path = field(default_factory=lambda: Path(_env("REEL_OUTPUT_DIR", str(PROJECT_ROOT / "output"))))
     music_dir: Path = PROJECT_ROOT / "assets" / "music"
     font_path: str = field(default_factory=lambda: _env("REEL_FONT"))
+
+
+# Settings a user can change from the app; saved next to the videos.
+EDITABLE = ["geo", "language", "voice", "niche", "target_seconds", "schedule_time", "ai_backend", "claude_model"]
+
+
+def settings_path(cfg: Config) -> Path:
+    return cfg.output_dir / "settings.json"
+
+
+def load_settings(cfg: Config) -> Config:
+    """Apply settings saved from the app on top of env/.env values."""
+    import json
+
+    path = settings_path(cfg)
+    if path.exists():
+        for key, value in json.loads(path.read_text(encoding="utf-8")).items():
+            if key in EDITABLE:
+                setattr(cfg, key, type(getattr(cfg, key))(value))
+    return cfg
+
+
+def save_settings(cfg: Config, updates: dict) -> Config:
+    import json
+
+    for key, value in updates.items():
+        if key in EDITABLE:
+            setattr(cfg, key, type(getattr(cfg, key))(value))
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+    settings_path(cfg).write_text(json.dumps({k: getattr(cfg, k) for k in EDITABLE}, indent=2), encoding="utf-8")
+    return cfg

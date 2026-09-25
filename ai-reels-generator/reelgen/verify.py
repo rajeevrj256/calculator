@@ -1,0 +1,193 @@
+"""Automatic quality check before a video is delivered.
+
+Three layers:
+1. Script checks  – AI-sounding phrases, length, structure (instant, free).
+2. Technical checks – resolution, duration, audio level, black frames, captions
+   (ffmpeg, a few seconds).
+3. Claude review – Claude looks at frames from the finished video plus the
+   script and judges whether it feels human-made, hooks fast, and is accurate.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import imageio_ffmpeg
+from PIL import Image
+from pydantic import BaseModel, Field
+
+from .config import Config
+from .llm import ask
+from .script_writer import AI_CLICHES, ReelScript
+from .voice import SceneAudio
+
+log = logging.getLogger(__name__)
+FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+
+
+@dataclass
+class VerifyResult:
+    passed: bool = True
+    score: float | None = None
+    issues: list[str] = field(default_factory=list)
+    checks: dict = field(default_factory=dict)
+
+    def fail(self, issue: str) -> None:
+        self.passed = False
+        self.issues.append(issue)
+
+
+# ---------- 1. script ----------
+
+def check_script(script: ReelScript, cfg: Config) -> VerifyResult:
+    result = VerifyResult()
+    narration = " ".join(s.narration for s in script.scenes)
+    lowered = narration.lower() + " " + script.title.lower() + " " + script.caption.lower()
+
+    found = [p for p in AI_CLICHES if re.search(rf"\b{re.escape(p)}\b", lowered)]
+    result.checks["ai_phrases"] = found
+    if found:
+        result.fail(f"Uses AI-sounding phrases: {', '.join(found)}. Rephrase them the way a person would say it.")
+
+    words = len(narration.split())
+    result.checks["word_count"] = words
+    low, high = cfg.target_seconds * 1.6, cfg.target_seconds * 3.4
+    if not low <= words <= high:
+        result.fail(f"Narration is {words} words; aim for {int(low)}-{int(high)} for a {cfg.target_seconds}s video.")
+
+    if not 4 <= len(script.scenes) <= 12:
+        result.fail(f"{len(script.scenes)} scenes; use 6-9.")
+    if re.search(r"https?://|www\.|[#@*_]", narration):
+        result.fail("Narration contains URLs or symbols that text-to-speech will read out loud.")
+    return result
+
+
+# ---------- 2. technical ----------
+
+def _ffmpeg(args: list[str]) -> str:
+    proc = subprocess.run([FFMPEG, "-hide_banner", *args], capture_output=True, text=True, timeout=300)
+    return proc.stderr
+
+
+def probe(video: Path) -> dict:
+    info = _ffmpeg(["-i", str(video)])
+    out: dict = {}
+    if m := re.search(r"Duration: (\d+):(\d+):([\d.]+)", info):
+        out["duration"] = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3])
+    if m := re.search(r"Video: .*?, (\d{2,5})x(\d{2,5})", info):
+        out["width"], out["height"] = int(m[1]), int(m[2])
+    if m := re.search(r"([\d.]+) fps", info):
+        out["fps"] = float(m[1])
+    out["has_audio"] = "Audio:" in info
+    return out
+
+
+def check_video(video: Path, scenes: list[SceneAudio], script: ReelScript, cfg: Config) -> VerifyResult:
+    result = VerifyResult()
+    if not video.exists() or video.stat().st_size < 50_000:
+        result.fail("Video file missing or empty.")
+        return result
+
+    info = probe(video)
+    result.checks["probe"] = info
+    if (info.get("width"), info.get("height")) != (cfg.width, cfg.height):
+        result.fail(f"Resolution is {info.get('width')}x{info.get('height')}, expected {cfg.width}x{cfg.height}.")
+    duration = info.get("duration", 0)
+    if not 10 <= duration <= max(90, cfg.target_seconds * 1.6):
+        result.fail(f"Duration {duration:.1f}s is outside the usable range.")
+    if not info.get("has_audio"):
+        result.fail("Video has no audio track.")
+
+    vol = _ffmpeg(["-i", str(video), "-vn", "-af", "volumedetect", "-f", "null", "-"])
+    if m := re.search(r"mean_volume: (-?[\d.]+) dB", vol):
+        mean = float(m[1])
+        result.checks["mean_volume_db"] = mean
+        if mean < -35:
+            result.fail(f"Audio is almost silent (mean {mean} dB).")
+
+    black = _ffmpeg(["-i", str(video), "-an", "-vf", "blackdetect=d=0.4:pix_th=0.08", "-f", "null", "-"])
+    black_total = sum(float(x) for x in re.findall(r"black_duration:([\d.]+)", black))
+    result.checks["black_seconds"] = round(black_total, 2)
+    if black_total > 0.8:
+        result.fail(f"{black_total:.1f}s of black frames.")
+
+    spoken = sum(len(s.words) for s in scenes)
+    written = sum(len(s.narration.split()) for s in script.scenes)
+    result.checks["caption_coverage"] = round(spoken / max(written, 1), 2)
+    if spoken < written * 0.8:
+        result.fail("Captions are missing for part of the narration (voice timing data incomplete).")
+
+    size_mb = video.stat().st_size / 1e6
+    result.checks["size_mb"] = round(size_mb, 1)
+    if size_mb > 100:
+        result.fail(f"File is {size_mb:.0f} MB; too large for easy upload.")
+    return result
+
+
+# ---------- 3. Claude review ----------
+
+class Review(BaseModel):
+    human_feel: int = Field(description="1-10: does this look and sound like a real creator made it (10) or obviously AI-generated (1)?")
+    hook: int = Field(description="1-10: would the first 2 seconds stop someone scrolling?")
+    visuals_match: int = Field(description="1-10: do the frames match what's being said?")
+    accuracy: int = Field(description="1-10: are the claims correct and not misleading, as far as you know?")
+    blocking_issues: list[str] = Field(description="Problems that must be fixed before posting: factual errors, contradictions between scenes, misleading or exaggerated claims, anything that sounds obviously AI-written, or a weak first line. Empty if none.")
+    issues: list[str] = Field(description="Smaller improvements worth making. Empty if none.")
+    fix_instructions: str = Field(description="Concrete instructions for the writer to fix the issues in the next draft. Empty if none.")
+
+
+REVIEW_SYSTEM = """You are a strict short-form video editor reviewing a Reel/Short before it is posted. \
+You judge whether it feels made by a real human creator, hooks instantly, matches visuals to words, \
+and is accurate. Be honest and specific; don't pass mediocre work. Anything that would embarrass \
+the creator in the comments (a wrong fact, a line that contradicts another, a clickbait exaggeration) \
+is a blocking issue."""
+
+
+def contact_sheet(video: Path, out_path: Path, frames: int = 6) -> Path:
+    duration = probe(video).get("duration", 10)
+    tiles = []
+    for i in range(frames):
+        t = duration * (i + 0.5) / frames
+        tile = out_path.with_name(f"_frame{i}.jpg")
+        _ffmpeg(["-y", "-ss", f"{t:.2f}", "-i", str(video), "-frames:v", "1", "-vf", "scale=360:640", str(tile)])
+        if tile.exists():
+            tiles.append(Image.open(tile).convert("RGB"))
+            tile.unlink()
+    cols = 3
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (360 * cols, 640 * max(rows, 1)), "black")
+    for i, tile in enumerate(tiles):
+        sheet.paste(tile, ((i % cols) * 360, (i // cols) * 640))
+    sheet.save(out_path, quality=85)
+    return out_path
+
+
+def review_with_claude(video: Path, script: ReelScript, cfg: Config,
+                       stock_footage: bool = True) -> tuple[Review, VerifyResult]:
+    sheet = contact_sheet(video, video.with_name("review_frames.jpg"))
+    narration = "\n".join(f"{i + 1}. {s.narration}" for i, s in enumerate(script.scenes))
+    prompt = (
+        f"The image is a contact sheet of 6 frames sampled evenly through the video, left to right, "
+        f"top to bottom.\n\nOn-screen hook: {script.title}\nTopic: {script.topic}\n"
+        f"Facts used: {script.facts_checked}\n\nVoiceover by scene:\n{narration}\n\n"
+        f"Caption: {script.caption}\n\nScore it and list what to fix."
+    )
+    if not stock_footage:
+        prompt += ("\nNote: backgrounds are plain placeholder gradients because no stock-footage key is "
+                   "configured. Don't penalise that; score visuals_match 10 and judge the rest.")
+    review = ask(cfg.ai_backend, cfg.claude_model, REVIEW_SYSTEM, prompt, Review, images=[sheet])
+
+    result = VerifyResult()
+    scores = [review.human_feel, review.hook, review.visuals_match, review.accuracy]
+    result.score = round(sum(scores) / len(scores), 1)
+    result.checks["review"] = review.model_dump()
+    if review.blocking_issues:
+        for issue in review.blocking_issues:
+            result.fail("Reviewer: " + issue)
+    elif min(scores) < 6 or result.score < 7:
+        result.fail("Reviewer: " + "; ".join(review.issues or ["scores too low"]))
+    return review, result
