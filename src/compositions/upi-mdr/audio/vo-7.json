@@ -1,0 +1,90 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "Small",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "vendors",
+                      "startMs":  606
+                  },
+                  {
+                      "text":  "stay",
+                      "startMs":  1067
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  1377
+                  },
+                  {
+                      "text":  "up",
+                      "startMs":  2328
+                  },
+                  {
+                      "text":  "to",
+                      "startMs":  2528
+                  },
+                  {
+                      "text":  "1",
+                      "startMs":  2693
+                  },
+                  {
+                      "text":  "lakh",
+                      "startMs":  2982
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  3265
+                  },
+                  {
+                      "text":  "month",
+                      "startMs":  3334
+                  },
+                  {
+                      "text":  "Railways",
+                      "startMs":  4911
+                  },
+                  {
+                      "text":  "telecom",
+                      "startMs":  5842
+                  },
+                  {
+                      "text":  "insurance",
+                      "startMs":  6744
+                  },
+                  {
+                      "text":  "and",
+                      "startMs":  7722
+                  },
+                  {
+                      "text":  "fuel",
+                      "startMs":  7922
+                  },
+                  {
+                      "text":  "pay",
+                      "startMs":  8267
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  8542
+                  },
+                  {
+                      "text":  "flat",
+                      "startMs":  8625
+                  },
+                  {
+                      "text":  "5",
+                      "startMs":  9038
+                  },
+                  {
+                      "text":  "rupees",
+                      "startMs":  9458
+                  },
+                  {
+                      "text":  "instead",
+                      "startMs":  9982
+                  }
+              ],
+    "scene":  7,
+    "text":  "Small vendors stay free, up to 1 lakh a month. Railways, telecom, insurance, and fuel pay a flat 5 rupees instead."
+}

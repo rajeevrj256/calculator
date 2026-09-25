@@ -1,0 +1,7 @@
+node_modules/
+out/*
+!out/.gitkeep
+build/
+.remotion/
+*.log
+.DS_Store

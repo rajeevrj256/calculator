@@ -1,0 +1,110 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "On",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "an",
+                      "startMs":  302
+                  },
+                  {
+                      "text":  "eligible",
+                      "startMs":  475
+                  },
+                  {
+                      "text":  "5,000",
+                      "startMs":  1033
+                  },
+                  {
+                      "text":  "5,000",
+                      "startMs":  1460
+                  },
+                  {
+                      "text":  "rupee",
+                      "startMs":  2032
+                  },
+                  {
+                      "text":  "payment",
+                      "startMs":  2410
+                  },
+                  {
+                      "text":  "0.4 percent",
+                      "startMs":  3478
+                  },
+                  {
+                      "text":  "0.4 percent",
+                      "startMs":  3954
+                  },
+                  {
+                      "text":  "0.4 percent",
+                      "startMs":  4339
+                  },
+                  {
+                      "text":  "0.4 percent",
+                      "startMs":  4615
+                  },
+                  {
+                      "text":  "works",
+                      "startMs":  5131
+                  },
+                  {
+                      "text":  "out",
+                      "startMs":  5510
+                  },
+                  {
+                      "text":  "to",
+                      "startMs":  5765
+                  },
+                  {
+                      "text":  "20",
+                      "startMs":  5903
+                  },
+                  {
+                      "text":  "rupees",
+                      "startMs":  6420
+                  },
+                  {
+                      "text":  "Capped",
+                      "startMs":  8245
+                  },
+                  {
+                      "text":  "at",
+                      "startMs":  8624
+                  },
+                  {
+                      "text":  "300",
+                      "startMs":  8796
+                  },
+                  {
+                      "text":  "300",
+                      "startMs":  9134
+                  },
+                  {
+                      "text":  "rupees",
+                      "startMs":  9713
+                  },
+                  {
+                      "text":  "even",
+                      "startMs":  10898
+                  },
+                  {
+                      "text":  "above",
+                      "startMs":  11215
+                  },
+                  {
+                      "text":  "75,000",
+                      "startMs":  11559
+                  },
+                  {
+                      "text":  "75,000",
+                      "startMs":  12172
+                  },
+                  {
+                      "text":  "75,000",
+                      "startMs":  12593
+                  }
+              ],
+    "scene":  6,
+    "text":  "On an eligible 5,000 rupee payment, 0.4 percent works out to 20 rupees. Capped at 300 rupees, even above 75,000."
+}

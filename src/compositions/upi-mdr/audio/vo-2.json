@@ -1,0 +1,62 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "This",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "month",
+                      "startMs":  378
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  1377
+                  },
+                  {
+                      "text":  "UPI",
+                      "startMs":  1494
+                  },
+                  {
+                      "text":  "update",
+                      "startMs":  2142
+                  },
+                  {
+                      "text":  "has",
+                      "startMs":  2610
+                  },
+                  {
+                      "text":  "people",
+                      "startMs":  2865
+                  },
+                  {
+                      "text":  "asking",
+                      "startMs":  3299
+                  },
+                  {
+                      "text":  "one",
+                      "startMs":  3775
+                  },
+                  {
+                      "text":  "question",
+                      "startMs":  4043
+                  },
+                  {
+                      "text":  "Is",
+                      "startMs":  5800
+                  },
+                  {
+                      "text":  "UPI",
+                      "startMs":  6014
+                  },
+                  {
+                      "text":  "still",
+                      "startMs":  6586
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  6923
+                  }
+              ],
+    "scene":  2,
+    "text":  "This month, a UPI update has people asking one question. Is UPI still free?"
+}

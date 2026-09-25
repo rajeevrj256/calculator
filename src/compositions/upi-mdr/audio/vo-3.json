@@ -1,0 +1,54 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "Some",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "headlines",
+                      "startMs":  461
+                  },
+                  {
+                      "text":  "make",
+                      "startMs":  1088
+                  },
+                  {
+                      "text":  "it",
+                      "startMs":  1370
+                  },
+                  {
+                      "text":  "sound",
+                      "startMs":  1487
+                  },
+                  {
+                      "text":  "like",
+                      "startMs":  1901
+                  },
+                  {
+                      "text":  "UPI",
+                      "startMs":  2183
+                  },
+                  {
+                      "text":  "is",
+                      "startMs":  2783
+                  },
+                  {
+                      "text":  "becoming",
+                      "startMs":  2989
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  3540
+                  },
+                  {
+                      "text":  "paid",
+                      "startMs":  3609
+                  },
+                  {
+                      "text":  "app",
+                      "startMs":  3947
+                  }
+              ],
+    "scene":  3,
+    "text":  "Some headlines make it sound like UPI is becoming a paid app."
+}

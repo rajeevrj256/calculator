@@ -1,0 +1,35 @@
+{
+  "name": "motion-graphics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion motion-graphics starter: programmatic video for export into any editor.",
+  "scripts": {
+    "postinstall": "node scripts/patch-remotion-windows.js",
+    "studio": "remotion studio",
+    "layout-server": "node scripts/layout-server.js",
+    "render:all": "node scripts/render-all.js",
+    "render:16x9": "node scripts/render-all.js UpiMdrVideo 16x9",
+    "render:9x16": "node scripts/render-all.js UpiMdrVideo 9x16",
+    "render:4x5": "node scripts/render-all.js UpiMdrVideo 4x5",
+    "render:1x1": "node scripts/render-all.js UpiMdrVideo 1x1",
+    "thumbnails": "node scripts/render-all.js UpiMdrVideo --thumb",
+    "build": "remotion bundle",
+    "upgrade": "remotion upgrade",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/effects": "4.0.525",
+    "@remotion/google-fonts": "^4.0.0",
+    "@remotion/zod-types": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0",
+    "zod": "^3.22.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

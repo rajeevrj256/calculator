@@ -1,0 +1,102 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "Here\u0027s",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "what",
+                      "startMs":  461
+                  },
+                  {
+                      "text":  "changed",
+                      "startMs":  709
+                  },
+                  {
+                      "text":  "From",
+                      "startMs":  2528
+                  },
+                  {
+                      "text":  "October 15th",
+                      "startMs":  2776
+                  },
+                  {
+                      "text":  "October 15th",
+                      "startMs":  3375
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  4629
+                  },
+                  {
+                      "text":  "fee",
+                      "startMs":  4732
+                  },
+                  {
+                      "text":  "applies",
+                      "startMs":  5008
+                  },
+                  {
+                      "text":  "but",
+                      "startMs":  6172
+                  },
+                  {
+                      "text":  "only",
+                      "startMs":  6434
+                  },
+                  {
+                      "text":  "above",
+                      "startMs":  6792
+                  },
+                  {
+                      "text":  "2,000",
+                      "startMs":  7164
+                  },
+                  {
+                      "text":  "2,000",
+                      "startMs":  7405
+                  },
+                  {
+                      "text":  "rupees",
+                      "startMs":  8039
+                  },
+                  {
+                      "text":  "Paying",
+                      "startMs":  9831
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  10313
+                  },
+                  {
+                      "text":  "friend",
+                      "startMs":  10389
+                  },
+                  {
+                      "text":  "still",
+                      "startMs":  11450
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  11787
+                  },
+                  {
+                      "text":  "Everyday",
+                      "startMs":  13303
+                  },
+                  {
+                      "text":  "payments",
+                      "startMs":  13840
+                  },
+                  {
+                      "text":  "still",
+                      "startMs":  15005
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  15342
+                  }
+              ],
+    "scene":  4,
+    "text":  "Here\u0027s what changed. From October 15th, a fee applies, but only above 2,000 rupees. Paying a friend, still free. Everyday payments, still free."
+}
