@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 *TEMP_MPY_*
 assets/models
+.venv/

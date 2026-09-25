@@ -6,7 +6,7 @@ Each video goes through these steps:
 
 1. **Find trends.** It pulls Google Trends for your country and Reddit r/popular, with fallback topics if both are unavailable. It never repeats a topic.
 2. **Claude writes it.** Claude picks the best topic, looks up the facts on the web, and writes a script in a creator's voice: a strong hook, short spoken lines, and none of the usual AI phrases ("did you know", "let's dive in", "mind-blowing", …).
-3. **Voice.** Natural neural voices (English, Hindi and 70+ languages). The pace and pitch shift a little between scenes so it doesn't sound robotic.
+3. **Voice.** Natural neural voices (English, Hindi and 70+ languages). The pace and pitch shift a little between scenes so it doesn't sound robotic. It uses Microsoft's free online voices, and switches automatically to **Kokoro**, an open-source voice that runs on your own computer, if Microsoft refuses the connection (it does for some networks and cloud servers). The offline model downloads once, about 350 MB.
 4. **Footage.** Two or three different stock clips per scene from Pexels, cut every few seconds with editor-style punch-in zooms. No clip is used twice.
 5. **Editing.** 1080×1920, bold word-by-word captions, a hook title, a progress bar, and optional music.
 6. **Automatic verification** (see below). A video that fails is rewritten using the reviewer's notes and made again.
@@ -62,6 +62,7 @@ In the app:
 ### Optional keys (`.env`)
 - `PEXELS_API_KEY`: free from https://www.pexels.com/api/. **Strongly recommended.** Without it, videos use plain gradient backgrounds.
 - `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`: also get each finished video on Telegram.
+- `REEL_TTS`: `auto` (default), `edge` (Microsoft online only) or `kokoro` (offline only). Also in the app's Settings.
 - Music: put royalty-free `.mp3` files in `assets/music/`.
 
 ### Command line
@@ -91,7 +92,7 @@ reelgen/
   trends.py         trending-topic sources + history of used topics
   script_writer.py  creator-style script + banned AI phrases
   verify.py         script, technical and Claude review checks
-  voice.py          neural voiceover with word timings
+  voice.py          voiceover (Microsoft online / Kokoro offline) with word timings
   visuals.py        Pexels footage (multiple cuts per scene)
   captions.py       word-by-word highlighted captions
   video.py          final 9:16 edit and export
