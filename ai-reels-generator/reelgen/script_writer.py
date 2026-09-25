@@ -95,7 +95,9 @@ Topic choice: pick the candidate with the broadest appeal that works as a 30 sec
 Skip tragedies, deaths, violence, explicit content, politics and politicians, and rumours, \
 allegations or gossip about real people — anything where a wrong detail could mislead viewers \
 about a real person. Sports, science, tech, money, entertainment releases, weather and culture \
-are good fits. Evergreen \
+are good fits. The visuals are stock footage plus animated graphics, so prefer topics generic \
+footage can show (a place, an activity, money, nature, technology) over a story that is only \
+about one named person, whom no stock clip can show. Evergreen \
 candidates are fallbacks — prefer a real trend when a good one exists."""
 
 

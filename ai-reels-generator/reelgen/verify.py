@@ -151,7 +151,7 @@ def check_video(video: Path, scenes: list[SceneAudio], script: ReelScript, cfg: 
 class Review(BaseModel):
     human_feel: int = Field(description="1-10: does this look and sound like a real creator made it (10) or obviously AI-generated (1)?")
     hook: int = Field(description="1-10: would the first 2 seconds stop someone scrolling?")
-    visuals_match: int = Field(description="1-10: do the frames match what's being said?")
+    visuals_match: int = Field(description="1-10: do the frames fit what's being said? Theme-appropriate stock footage counts as a match; only contradicting or misleading footage scores low.")
     accuracy: int = Field(description="1-10: are the claims correct and not misleading, as far as you know?")
     blocking_issues: list[str] = Field(description="Problems that must be fixed before posting: factual errors, contradictions between scenes, misleading or exaggerated claims, anything that sounds obviously AI-written, or a weak first line. Empty if none.")
     issues: list[str] = Field(description="Smaller improvements worth making. Empty if none.")
@@ -162,7 +162,12 @@ REVIEW_SYSTEM = """You are a strict short-form video editor reviewing a Reel/Sho
 You judge whether it feels made by a real human creator, hooks instantly, matches visuals to words, \
 and is accurate. Be honest and specific; don't pass mediocre work. Anything that would embarrass \
 the creator in the comments (a wrong fact, a line that contradicts another, a clickbait exaggeration) \
-is a blocking issue, and so is stating an unconfirmed claim about a real person as fact."""
+is a blocking issue, and so is stating an unconfirmed claim about a real person as fact.
+
+The footage is stock video: it can never show a specific named person, team or event. Generic \
+footage that fits the theme (a soccer pitch for a football story, a trading screen for markets) is \
+normal for this format and fine. Only footage that contradicts or misleads — the wrong sport or \
+place, or a stranger presented as if they were the person being named — is a visuals problem."""
 
 
 def contact_sheet(video: Path, out_path: Path, frames: int = 6) -> Path:
