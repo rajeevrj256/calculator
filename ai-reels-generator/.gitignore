@@ -6,3 +6,4 @@ __pycache__/
 assets/models
 .venv/
 remotion/node_modules/
+remotion/out/

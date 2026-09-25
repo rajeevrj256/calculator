@@ -7,7 +7,7 @@ export type Word = {text: string; start: number; end: number};
 export type CaptionGroup = {start: number; end: number; words: Word[]};
 
 export type Cut = {
-  src: string;
+  src: string; // "" = animated gradient placeholder (no footage available)
   start: number;
   duration: number;
   offset: number; // where to start inside the source clip
@@ -35,4 +35,6 @@ export type ReelProps = {
   cuts: Cut[];
   captions: CaptionGroup[];
   music: string | null;
+  // Short sound effects synced to scene changes and graphic entrances; null = silent.
+  sfx: {whoosh: string; pop: string} | null;
 };

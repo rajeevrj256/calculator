@@ -75,6 +75,7 @@ def synthesize_scenes(narrations: list[str], voice: str, out_dir: Path, engine: 
                       kokoro_voice: str = "") -> list[SceneAudio]:
     """Render one audio file per scene so each scene's duration follows its voiceover.
 
+    Delivery is brisk, like a Shorts creator (videos are capped at 30 seconds).
     Speed (and pitch, where supported) drifts slightly from scene to scene, like a
     person speaking, instead of the flat identical delivery that gives TTS away.
     The hook is a touch faster and more energetic.
@@ -109,7 +110,7 @@ def _edge_scenes(narrations: list[str], voice: str, out_dir: Path) -> list[Scene
     results = []
     for i, text in enumerate(narrations):
         path = out_dir / f"scene_{i:02d}.mp3"
-        rate = f"{random.randint(10, 14) if i == 0 else random.randint(3, 10):+d}%"
+        rate = f"{random.randint(20, 24) if i == 0 else random.randint(12, 20):+d}%"
         pitch = f"{random.randint(-3, 3):+d}Hz"
         words = asyncio.run(_edge_synthesize(text, voice, rate, pitch, path))
         results.append(SceneAudio(path, words))
@@ -156,7 +157,7 @@ def _kokoro_scenes(narrations: list[str], voice: str, out_dir: Path) -> list[Sce
     lang = KOKORO_LANG.get(voice[:1], "en-us")
     results = []
     for i, text in enumerate(narrations):
-        speed = random.uniform(1.08, 1.13) if i == 0 else random.uniform(1.0, 1.07)
+        speed = random.uniform(1.20, 1.24) if i == 0 else random.uniform(1.12, 1.20)
         samples, rate = kokoro.create(text, voice=voice, speed=speed, lang=lang,
                                       sentence_pause=SENTENCE_PAUSE, clause_pause=CLAUSE_PAUSE)
         path = out_dir / f"scene_{i:02d}.wav"

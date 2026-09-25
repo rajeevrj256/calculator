@@ -2,7 +2,7 @@ import '@fontsource/montserrat/800.css';
 import '@fontsource/montserrat/900.css';
 import '@fontsource/noto-sans-devanagari/800.css';
 import {useEffect, useState} from 'react';
-import {continueRender, delayRender} from 'remotion';
+import {Easing, continueRender, delayRender, interpolate, spring} from 'remotion';
 
 export const COLORS = {
   accent: '#FFD60A',
@@ -31,6 +31,26 @@ export const OUTLINE = [
 ].join(', ');
 
 export const clamp = {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'} as const;
+
+// ---- Shared motion: wind-up -> overshoot -> settle in, subtle life while holding, eased exit.
+
+// Gentle vertical drift so a held graphic never sits perfectly still.
+export const float = (frame: number, amplitude = 6, periodFrames = 110) =>
+  Math.sin((frame / periodFrames) * Math.PI * 2) * amplitude;
+
+// Position (%) of a slow band of light sweeping across a card, looping.
+export const shineSweep = (frame: number, periodFrames = 150) =>
+  interpolate(frame % periodFrames, [0, periodFrames], [-130, 230]);
+
+// 0 -> 1 over the last `frames` frames of a `duration`-frame element, eased in.
+export const exitProgress = (frame: number, duration: number, frames: number) =>
+  interpolate(frame, [duration - frames, duration - 1], [0, 1], {...clamp, easing: Easing.in(Easing.cubic)});
+
+// Brief celebration on a key number: pops past 1 and settles back.
+export const payoffPop = (frame: number, fps: number, at: number) => {
+  const s = spring({frame: frame - at, fps, config: {damping: 9, mass: 0.5, stiffness: 140}, durationInFrames: 16});
+  return 1 + 0.14 * Math.sin(Math.PI * Math.min(s, 1));
+};
 
 // Hold every frame until the fonts are ready, so no frame renders in a fallback font.
 export const useFonts = () => {

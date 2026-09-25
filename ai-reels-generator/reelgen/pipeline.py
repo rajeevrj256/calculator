@@ -14,12 +14,12 @@ import shutil
 from datetime import datetime, timezone
 from typing import Callable
 
-from .config import Config
+from .config import MAX_SECONDS, Config
 from .notifier import notify
 from .script_writer import write_script
 from .trends import Trend, collect_trends, load_history, save_history
 from .verify import VerifyResult, check_script, check_video, review_with_claude
-from .video import render_video
+from .video import render_video, voice_seconds
 from .visuals import fetch_backgrounds
 from .voice import synthesize_scenes
 
@@ -64,11 +64,21 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
         progress(f"{tag} Recording voiceover")
         scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio",
                                    cfg.tts_engine, cfg.kokoro_voice)
+        spoken = voice_seconds(scenes)
+        if spoken > MAX_SECONDS - 1 and attempt < cfg.max_attempts:
+            # Too long to fit: skip the render and ask for a shorter script. (On the last
+            # attempt it's rendered anyway, so there's still a video to look at.)
+            words = sum(len(s.narration.split()) for s in script.scenes)
+            feedback = (f"The voiceover runs {spoken:.1f}s but the whole video must stay under {MAX_SECONDS}s. "
+                        f"Cut the narration from {words} to about {int(words * (MAX_SECONDS - 3) / spoken)} words.")
+            progress(f"{tag} Script too long: {feedback}")
+            continue
         progress(f"{tag} Downloading footage")
         backgrounds = fetch_backgrounds([s.visual_queries for s in script.scenes], cfg.pexels_api_key,
                                         cfg.width, cfg.height, run_dir / "backgrounds")
         progress(f"{tag} Editing the video (takes a few minutes)")
-        rendered = render_video(script.title, scenes, backgrounds, cfg, run_dir / "reel.mp4")
+        rendered = render_video(script.title, scenes, backgrounds, cfg, run_dir / "reel.mp4",
+                                graphics=[s.graphic for s in script.scenes])
 
         progress(f"{tag} Verifying video quality")
         verdict = check_video(run_dir / "reel.mp4", scenes, script, cfg)
@@ -121,6 +131,7 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
         "attempts": best["attempt"],
         **{k: str(final_dir / v) for k, v in (("video", "reel.mp4"), ("thumbnail", "thumbnail.jpg"))},
         "duration_seconds": best["rendered"]["duration_seconds"],
+        "editor": best["rendered"].get("editor", ""),
     }
     (final_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     save_history(history_path, script.topic)
@@ -150,8 +161,10 @@ def _restore_snapshot(run_dir) -> None:
         for f in best.iterdir():
             shutil.move(str(f), run_dir / f.name)
         best.rmdir()
-    for scratch in ("audio", "backgrounds"):
+    for scratch in ("audio", "backgrounds", "sfx"):
         shutil.rmtree(run_dir / scratch, ignore_errors=True)
+    for scratch in ("props.json", "music.mp3"):  # render inputs for Remotion
+        (run_dir / scratch).unlink(missing_ok=True)
 
 
 def run(cfg: Config, count: int = 1, topic: str | None = None, progress: Progress = log.info) -> list[dict]:

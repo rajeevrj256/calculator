@@ -30,6 +30,17 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # The Remotion video editor (animated graphics). Without it the simpler moviepy edit is used.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ai-reels-generator/remotion/package-lock.json
+
+      - name: Install the video editor
+        working-directory: ai-reels-generator/remotion
+        run: npm ci --no-audit --no-fund && npx remotion browser ensure
+
       # Remember which topics were already used so videos don't repeat.
       - name: Restore topic history
         uses: actions/cache/restore@v4

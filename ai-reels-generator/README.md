@@ -1,14 +1,14 @@
 # Reel Studio – AI Reels / Shorts Generator
 
-Makes faceless **Instagram Reels** and **YouTube Shorts** from what's trending today, checks each video automatically, and keeps everything on your own computer. You watch, copy captions, and save videos from your phone.
+Makes faceless **Instagram Reels** and **YouTube Shorts** (30 seconds at most) from what's trending today, checks each video automatically, and keeps everything on your own computer. You watch, copy captions, and save videos from your phone.
 
 Each video goes through these steps:
 
 1. **Find trends.** It pulls Google Trends for your country and Reddit r/popular, with fallback topics if both are unavailable. It never repeats a topic.
-2. **Claude writes it.** Claude picks the best topic, looks up the facts on the web, and writes a script in a creator's voice: a strong hook, short spoken lines, and none of the usual AI phrases ("did you know", "let's dive in", "mind-blowing", …).
-3. **Voice.** Natural neural voices (English, Hindi and 70+ languages). The pace and pitch shift a little between scenes so it doesn't sound robotic. It uses Microsoft's free online voices, and switches automatically to **Kokoro**, an open-source voice that runs on your own computer, if Microsoft refuses the connection (it does for some networks and cloud servers). The offline model downloads once, about 350 MB.
+2. **Claude writes it.** Claude picks the best topic, looks up the facts on the web, and writes a script in a creator's voice: a strong hook, short spoken lines (about 70–80 words in 5–7 scenes), and none of the usual AI phrases ("did you know", "let's dive in", "mind-blowing", …). It also designs 3–4 animated graphics for the video (a big number, a line chart, a before/after comparison or a keyword), using only real figures.
+3. **Voice.** Natural neural voices (English, Hindi and 70+ languages), at the brisk pace of a Shorts creator. The pace and pitch shift a little between scenes so it doesn't sound robotic. It uses Microsoft's free online voices, and switches automatically to **Kokoro**, an open-source voice that runs on your own computer, if Microsoft refuses the connection (it does for some networks and cloud servers). The offline model downloads once, about 350 MB.
 4. **Footage.** Two or three different stock clips per scene from Pexels, cut every few seconds with editor-style punch-in zooms. No clip is used twice.
-5. **Editing.** 1080×1920, bold word-by-word captions, a hook title, a progress bar, and optional music.
+5. **Editing.** Made with [Remotion](https://www.remotion.dev): 1080×1920, the animated graphics, word-by-word captions that pop in with the spoken word in yellow, a hook title, a white flash at each scene change, a progress bar, soft sound effects and optional music. Without Node.js it falls back to a simpler edit with no graphics.
 6. **Automatic verification** (see below). A video that fails is rewritten using the reviewer's notes and made again.
 7. **Delivery.** The video shows up in the app on your phone and PC, with optional Telegram delivery.
 
@@ -18,8 +18,8 @@ Every video passes three checks before it counts as done:
 
 | Check | What it looks at |
 |---|---|
-| Script | AI-sounding phrases, word count for the target length, scene count, symbols that TTS would read out |
-| Technical | 1080×1920 resolution, duration, audio present and loud enough, black frames, captions covering the whole voiceover, file size |
+| Script | AI-sounding phrases, word count for the target length, scene count, symbols that TTS would read out, 2–5 well-formed graphics |
+| Technical | 1080×1920 resolution, **30 seconds at most**, audio present and loud enough, black frames, captions covering the whole voiceover, file size |
 | Claude review | Claude looks at frames from the **finished video** plus the script and scores how human it feels, the hook, how well the visuals match, and accuracy. Any factual error, contradiction or clickbait exaggeration is a blocking issue |
 
 If a check fails, Claude rewrites the script using the feedback and the video is made again, up to `REEL_MAX_ATTEMPTS` times (default 3). If every attempt fails, you still get the best one, marked **"Check"** instead of **"✓"**, with the reasons listed.
@@ -31,6 +31,7 @@ The app runs on your PC or Mac. Videos are saved in `output/` on that computer. 
 **1. Install once**
 - [Python 3.10+](https://www.python.org/downloads/) (on Windows, tick "Add Python to PATH")
 - [Claude Code](https://claude.com/claude-code). Open a terminal, run `claude` once and log in. The app then uses **your Claude Code login**, so no API key is needed.
+- [Node.js LTS](https://nodejs.org) for the video editor (animated graphics). Optional: without it videos use a simpler edit.
 
 **2. Start**
 - Windows: double-click **`start.bat`**
@@ -54,7 +55,7 @@ The first start installs everything. Then it prints:
 In the app:
 - **Videos:** tap a video to watch it. You can **Save video**, **Copy caption** (caption and hashtags), and **Copy YouTube title**, and you can see why the topic was picked and which facts were used.
 - **Create:** make a video now, from today's trends or your own topic, with live progress.
-- **Settings:** country, language, voice, niche, length, a **daily automatic video** time, and which AI to use.
+- **Settings:** country, language, voice, niche, length (up to 30 s), a **daily automatic video** time, and which AI to use.
 
 > Set `REEL_APP_PIN=1234` (your own PIN) in `.env` so nobody else on your Wi-Fi can use the app.
 > The computer has to be on (and `start` running) to make videos and to watch them from your phone.
@@ -75,7 +76,7 @@ python -m reelgen --language Hindi --voice hi-IN-MadhurNeural
 python -m reelgen serve                  # the app (what start.bat/start.sh run)
 ```
 
-Each video gets a folder in `output/` containing `reel.mp4`, `thumbnail.jpg`, `report.json` (caption, hashtags, verification result), `script.json` and `review_frames.jpg` (the frames Claude reviewed).
+Each video gets a folder in `output/` containing `reel.mp4`, `thumbnail.jpg`, `report.json` (caption, hashtags, verification result, which editor made it), `script.json` and `review_frames.jpg` (the frames Claude reviewed).
 
 ## Optional: run in the cloud with GitHub Actions
 
@@ -94,11 +95,20 @@ reelgen/
   verify.py         script, technical and Claude review checks
   voice.py          voiceover (Microsoft online / Kokoro offline) with word timings
   visuals.py        Pexels footage (multiple cuts per scene)
-  captions.py       word-by-word highlighted captions
-  video.py          final 9:16 edit and export
+  captions.py       caption timing (and caption images for the simpler edit)
+  video.py          timeline, then the Remotion render (moviepy if Node is missing)
+  sfx.py            whoosh and pop sound effects, made on the fly
   notifier.py       Telegram + GitHub run summary
   pipeline.py       runs all steps with verify-and-retry
+remotion/           the video edit (React + Remotion), rendered by video.py
+  src/Reel.tsx      the "Reel" composition: layers, audio, sound effects
+  src/Graphics.tsx  stat / chart / compare / keyword graphics
+  src/Captions.tsx  word-by-word pop captions
+  src/HookTitle.tsx the opening hook card
+  src/Background.tsx footage cuts, punch-in zoom, scene-change flash
 ```
+
+To preview or tweak the edit: `cd remotion && npm run studio` opens Remotion Studio with sample props (`src/demo.ts`). The Python pipeline renders with `remotion render src/index.ts Reel out.mp4 --props=props.json --public-dir=<video folder>`.
 
 ## Notes
 

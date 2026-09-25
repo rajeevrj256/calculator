@@ -7,7 +7,23 @@ if not exist .venv (
   .venv\Scripts\python -m pip install -q --upgrade pip
   .venv\Scripts\python -m pip install -q -r requirements.txt
 )
+if not exist remotion\node_modules\.bin\remotion.cmd call :install_editor
 if not exist .env copy .env.example .env >nul
 where claude >nul 2>nul || echo Note: Claude Code not found. Install it from https://claude.com/claude-code and run "claude" once to log in, or put ANTHROPIC_API_KEY in .env.
 .venv\Scripts\python -m reelgen serve %*
 pause
+goto :eof
+
+rem The video editor (Remotion) needs Node.js. Without it videos still work, using a simpler edit.
+:install_editor
+where npm >nul 2>nul || (
+  echo Note: Node.js not found, so videos use the simpler edit without animated graphics.
+  echo       Install Node.js LTS from https://nodejs.org and start again to get the full edit.
+  exit /b
+)
+echo First run: installing the video editor, takes a few minutes...
+pushd remotion
+call npm install --no-audit --no-fund --loglevel=error
+if not errorlevel 1 call node_modules\.bin\remotion browser ensure
+popd
+exit /b

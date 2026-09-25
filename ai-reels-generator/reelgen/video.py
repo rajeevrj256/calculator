@@ -1,13 +1,25 @@
-"""Assemble the final 9:16 video: backgrounds + voiceover + captions + music."""
+"""Assemble the final 9:16 video: backgrounds + voiceover + captions + graphics + music.
+
+The edit is rendered by Remotion (the `remotion/` folder): animated graphics,
+word-by-word captions, the hook title, punch-in cuts with flashes, and synced
+sound effects. If Node.js or the Remotion packages aren't installed (or the
+render fails), a simpler moviepy edit without graphics is made instead.
+"""
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import random
+import re
+import shutil
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
+import imageio_ffmpeg
 import numpy as np
-from PIL import Image
 from moviepy import (
     AudioFileClip,
     ColorClip,
@@ -20,16 +32,187 @@ from moviepy import (
     vfx,
 )
 
-from .captions import build_captions, render_title
-from .config import Config
+from .captions import build_captions, group_words, render_title
+from .config import MAX_SECONDS, PROJECT_ROOT, Config
+from .sfx import write_sfx
 from .voice import SceneAudio
 
 log = logging.getLogger(__name__)
 
+REMOTION_DIR = PROJECT_ROOT / "remotion"
+FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+
 # Breathing room after each scene's narration; varied so the pacing isn't robotic.
 SCENE_PADDING = (0.12, 0.35)
+MIN_PADDING = 0.05
 TITLE_SECONDS = 2.8
 
+
+# ---------- timeline (shared by both editors) ----------
+
+@dataclass
+class Timeline:
+    starts: list[float]
+    durations: list[float]
+
+    @property
+    def total(self) -> float:
+        return self.starts[-1] + self.durations[-1] if self.starts else 0.0
+
+
+def media_seconds(path: Path) -> float:
+    """Length of an audio or video file, read from ffmpeg's header info."""
+    info = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace").stderr
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", info)
+    return int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3]) if m else 0.0
+
+
+def voice_seconds(scenes: list[SceneAudio]) -> float:
+    return sum(media_seconds(s.path) for s in scenes)
+
+
+def plan_timeline(scenes: list[SceneAudio]) -> Timeline:
+    """Each scene lasts its voiceover plus a little air, keeping the video under MAX_SECONDS
+    by shrinking the air first (a frame of margin keeps rounding from tipping it over)."""
+    voices = [media_seconds(s.path) for s in scenes]
+    pads = [random.uniform(*SCENE_PADDING) for _ in scenes]
+    room = MAX_SECONDS - 0.1 - sum(voices)
+    if sum(pads) > room:
+        shrink = max(room, MIN_PADDING * len(pads)) / sum(pads)
+        pads = [max(MIN_PADDING, p * shrink) for p in pads]
+    starts, t = [], 0.0
+    for voice, pad in zip(voices, pads):
+        starts.append(round(t, 3))
+        t += voice + pad
+    return Timeline(starts, [round(v + p, 3) for v, p in zip(voices, pads)])
+
+
+def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], cfg: Config,
+                 out_path: Path, graphics: list | None = None) -> dict:
+    """Render to `out_path`. Every input file must live inside out_path's folder,
+    which is the public dir Remotion serves them from."""
+    timeline = plan_timeline(scenes)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    editor = "remotion"
+    cli = _remotion_cli()
+    try:
+        if cli is None:
+            raise RuntimeError("Node.js or the Remotion packages are not installed (run start.bat / start.sh)")
+        props = build_props(title, scenes, backgrounds, graphics or [None] * len(scenes), timeline, cfg,
+                            out_path.parent)
+        _render_remotion(cli, props, out_path)
+    except Exception as exc:
+        log.warning("Remotion edit unavailable, using the simpler moviepy edit: %s", exc)
+        editor = f"moviepy ({exc})"[:300]
+        _render_moviepy(title, scenes, backgrounds, timeline, cfg, out_path)
+
+    thumb_path = out_path.with_name("thumbnail.jpg")
+    subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-ss", f"{min(1.0, timeline.total / 2):.2f}",
+                    "-i", str(out_path), "-frames:v", "1", "-q:v", "3", str(thumb_path)], check=False)
+    log.info("Rendered %s (%.1fs) with %s", out_path, timeline.total, editor)
+    return {"video": str(out_path), "thumbnail": str(thumb_path), "duration_seconds": round(timeline.total, 1),
+            "editor": editor}
+
+
+# ---------- Remotion ----------
+
+def _remotion_cli() -> Path | None:
+    cli = REMOTION_DIR / "node_modules" / ".bin" / ("remotion.cmd" if os.name == "nt" else "remotion")
+    return cli if cli.exists() and shutil.which("node") else None
+
+
+def _graphic(g) -> dict:
+    """Script graphic -> props, dropping ones that can't be drawn rather than failing the render."""
+    none = {"type": "none", "headline": "", "label": "", "points": []}
+    if g is None or g.type == "none":
+        return none
+    data = g.model_dump()
+    if g.type == "chart" and len(g.points) < 2:
+        return none
+    if g.type == "compare":
+        if len(g.points) < 2:
+            return none
+        data["points"] = data["points"][:2]
+    if g.type in ("stat", "keyword") and not g.headline.strip():
+        return none
+    return data
+
+
+def build_props(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], graphics: list,
+                timeline: Timeline, cfg: Config, public_dir: Path) -> dict:
+    """Everything the Reel composition needs (see remotion/src/types.ts). Times in seconds."""
+    def rel(path: Path) -> str:  # paths in props are relative to the public dir
+        return Path(path).resolve().relative_to(public_dir.resolve()).as_posix()
+
+    scene_props, cuts, captions = [], [], []
+    for i, (scene, clips, start, duration) in enumerate(zip(scenes, backgrounds, timeline.starts, timeline.durations)):
+        scene_props.append({"start": start, "duration": duration, "audio": rel(scene.path),
+                            "graphic": _graphic(graphics[i] if i < len(graphics) else None)})
+
+        per_clip = duration / len(clips)
+        for j, clip in enumerate(clips):
+            video = clip.suffix == ".mp4"
+            length = media_seconds(clip) if video else None
+            # Skip the stock intro, and leave enough clip to fill the cut.
+            offset = random.uniform(0, max(0.0, length - per_clip) * 0.6) if length else 0.0
+            placeholder = clip.stem.startswith("gradient_")
+            cuts.append({
+                "src": "" if placeholder else rel(clip),
+                "start": round(start + j * per_clip, 3),
+                "duration": round(per_clip, 3),
+                "offset": round(offset, 3),
+                "length": round(length, 3) if length else None,
+                "punchIn": (len(cuts) % 2) == 1,  # every other cut, across the whole video
+                "image": not video,
+            })
+
+        groups = group_words(scene.words)
+        for g_idx, group in enumerate(groups):
+            end = groups[g_idx + 1][0].start if g_idx + 1 < len(groups) else duration
+            words = [{"text": w.text, "start": round(start + w.start, 3), "end": round(start + min(w.end, duration), 3)}
+                     for w in group]
+            if end > group[0].start:
+                captions.append({"start": words[0]["start"], "end": round(start + end, 3), "words": words})
+
+    music = _pick_music(cfg, public_dir)
+    sfx = write_sfx(public_dir / "sfx")
+    return {
+        "title": title,
+        "fps": cfg.fps,
+        "duration": round(timeline.total, 3),
+        "scenes": scene_props,
+        "cuts": cuts,
+        "captions": captions,
+        "music": rel(music) if music else None,
+        "sfx": {name: rel(path) for name, path in sfx.items()},
+    }
+
+
+def _pick_music(cfg: Config, public_dir: Path) -> Path | None:
+    tracks = sorted(cfg.music_dir.glob("*.mp3")) if cfg.music_dir.exists() else []
+    if not tracks:
+        return None
+    return Path(shutil.copy(random.choice(tracks), public_dir / "music.mp3"))
+
+
+def _render_remotion(cli: Path, props: dict, out_path: Path) -> None:
+    public_dir = out_path.parent
+    props_path = public_dir / "props.json"
+    props_path.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
+    cmd = [str(cli), "render", "src/index.ts", "Reel", str(out_path),
+           f"--props={props_path}", f"--public-dir={public_dir}",
+           # bt709 tags the file as standard TV-range colour, so phones don't show it washed out.
+           "--codec=h264", "--crf=18", "--color-space=bt709", "--overwrite"]
+    log.info("Rendering with Remotion: %s", " ".join(cmd))
+    proc = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
+    if proc.returncode != 0 or not out_path.exists():
+        tail = (proc.stderr.strip() or proc.stdout.strip())[-1500:]
+        raise RuntimeError(f"Remotion render failed ({proc.returncode}): {tail}")
+
+
+# ---------- moviepy (fallback) ----------
 
 def _fill_frame(clip, width: int, height: int):
     """Scale to cover the frame, then center-crop to exactly width x height."""
@@ -84,20 +267,17 @@ def _music(total: float, cfg: Config):
     return track.with_effects(effects).subclipped(0, total)
 
 
-def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], cfg: Config,
-                 out_path: Path) -> dict:
+def _render_moviepy(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], timeline: Timeline,
+                    cfg: Config, out_path: Path) -> None:
     bg_layers, caption_layers, audio_layers = [], [], []
     caption_width = cfg.width - 140
     caption_y = int(cfg.height * 0.60)
-    t = 0.0
     cuts = 0
 
-    for scene, bg_paths in zip(scenes, backgrounds):
-        voice = AudioFileClip(str(scene.path))
-        duration = voice.duration + random.uniform(*SCENE_PADDING)
+    for scene, bg_paths, t, duration in zip(scenes, backgrounds, timeline.starts, timeline.durations):
         bg_layers.extend(_scene_backgrounds(bg_paths, t, duration, cfg, cuts))
         cuts += len(bg_paths)
-        audio_layers.append(voice.with_start(t))
+        audio_layers.append(AudioFileClip(str(scene.path)).with_start(t))
         for cap in build_captions(scene.words, t, t + duration, caption_width, font_path=cfg.font_path):
             caption_layers.append(
                 ImageClip(cap.image)
@@ -105,9 +285,8 @@ def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Pa
                 .with_duration(cap.end - cap.start)
                 .with_position(("center", caption_y - cap.image.shape[0] // 2))
             )
-        t += duration
 
-    total = t
+    total = timeline.total
     # Darken footage slightly so white captions stay readable on any background.
     dim = ColorClip((cfg.width, cfg.height), color=(0, 0, 0)).with_opacity(0.28).with_duration(total)
     title_img = render_title(title, cfg.width - 120, font_path=cfg.font_path)
@@ -124,7 +303,6 @@ def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Pa
         audio_layers.append(music)
     video = video.with_audio(CompositeAudioClip(audio_layers).with_duration(total))
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     video.write_videofile(
         str(out_path),
         fps=cfg.fps,
@@ -133,11 +311,7 @@ def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Pa
         preset="veryfast",
         threads=4,
         temp_audiofile=str(out_path.with_name("_temp_audio.m4a")),  # keep temp files out of the cwd
-        ffmpeg_params=["-pix_fmt", "yuv420p", "-movflags", "+faststart", "-crf", "21"],
+        ffmpeg_params=["-pix_fmt", "yuv420p", "-movflags", "+faststart", "-crf", "18"],
         logger=None,
     )
-    thumb_path = out_path.with_name("thumbnail.jpg")
-    Image.fromarray(video.get_frame(min(1.0, total / 2))[:, :, :3].astype("uint8")).save(thumb_path, quality=90)
     video.close()
-    log.info("Rendered %s (%.1fs)", out_path, total)
-    return {"video": str(out_path), "thumbnail": str(thumb_path), "duration_seconds": round(total, 1)}

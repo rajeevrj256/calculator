@@ -82,6 +82,7 @@ def fetch_backgrounds(scene_queries: list[list[str]], api_key: str, width: int, 
             except Exception as exc:
                 log.warning("Pexels failed for %r: %s", query, exc)
         if not clips:
-            clips.append(gradient_image(width, height, out_dir / f"bg_{i:02d}.png", seed=i))
+            # The Remotion edit swaps "gradient_*" stills for an animated placeholder.
+            clips.append(gradient_image(width, height, out_dir / f"gradient_{i:02d}.png", seed=i))
         result.append(clips)
     return result

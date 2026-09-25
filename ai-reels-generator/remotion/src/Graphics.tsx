@@ -1,16 +1,18 @@
 import React from 'react';
-import {AbsoluteFill, Easing, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Easing, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Layer} from './Layer';
 import type {Graphic, Point} from './types';
-import {COLORS, FONT, OUTLINE, clamp, fitSize, formatNumber, parseNumber} from './theme';
+import {COLORS, FONT, OUTLINE, clamp, exitProgress, fitSize, float, formatNumber, parseNumber, payoffPop, shineSweep} from './theme';
 
 // One animated graphic per scene, chosen by Claude in the script (type + data).
-// Everything enters with a spring and leaves with a quick fade before the scene ends.
+// Everything enters with a spring, floats gently while it holds, and drifts up and
+// fades out before the scene ends.
 
 type Props = {g: Graphic; frames: number};
 
 export const GraphicView: React.FC<Props> = ({g, frames}) => {
   const frame = useCurrentFrame();
-  const exit = interpolate(frame, [frames - 7, frames], [1, 0], clamp);
+  const exit = exitProgress(frame, frames, 8);
   const body =
     g.type === 'chart' && g.points.length >= 2 ? (
       <Chart g={g} />
@@ -21,7 +23,14 @@ export const GraphicView: React.FC<Props> = ({g, frames}) => {
     ) : (
       <Stat g={g} />
     );
-  return <AbsoluteFill style={{opacity: exit, fontFamily: FONT}}>{body}</AbsoluteFill>;
+  return (
+    <Layer
+      name={`graphic-${g.type}`}
+      style={{opacity: 1 - exit, transform: `translateY(${-40 * exit}px) scale(${1 - 0.05 * exit})`, fontFamily: FONT}}
+    >
+      {body}
+    </Layer>
+  );
 };
 
 const useEnter = (delay = 0) => {
@@ -31,7 +40,9 @@ const useEnter = (delay = 0) => {
 };
 
 const Card: React.FC<{children: React.ReactNode; top?: string}> = ({children, top = '19%'}) => {
+  const frame = useCurrentFrame();
   const enter = useEnter();
+  const x = shineSweep(frame, 120);
   return (
     <div
       style={{
@@ -44,13 +55,22 @@ const Card: React.FC<{children: React.ReactNode; top?: string}> = ({children, to
         background: COLORS.card,
         border: '2px solid rgba(255,255,255,0.10)',
         boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
-        transform: `translateY(${(1 - enter) * 80}px) scale(${0.85 + 0.15 * enter})`,
-        opacity: enter,
+        transform: `translateY(${(1 - enter) * 80 + float(frame, 5)}px) scale(${0.85 + 0.15 * enter})`,
+        opacity: Math.min(1, enter),
         color: COLORS.text,
         textAlign: 'center',
+        overflow: 'hidden',
       }}
     >
       {children}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: `linear-gradient(105deg, transparent ${x - 18}%, rgba(255,255,255,0.07) ${x}%, transparent ${x + 18}%)`,
+        }}
+      />
     </div>
   );
 };
@@ -67,6 +87,8 @@ const Stat: React.FC<{g: Graphic}> = ({g}) => {
   const parsed = parseNumber(g.headline);
   const text = parsed ? formatNumber(parsed.value * t, parsed) : g.headline;
   const line = interpolate(frame, [10, 26], [0, 1], {...clamp, easing: Easing.out(Easing.quad)});
+  const landed = Math.round(4 + fps * 0.9);
+  const glow = interpolate(frame, [landed, landed + 6, landed + 24], [0, 1, 0.35], clamp);
   return (
     <Card>
       <div
@@ -76,7 +98,8 @@ const Stat: React.FC<{g: Graphic}> = ({g}) => {
           color: COLORS.accent,
           lineHeight: 1.05,
           fontVariantNumeric: 'tabular-nums',
-          textShadow: '0 8px 30px rgba(0,0,0,0.5)',
+          transform: `scale(${payoffPop(frame, fps, landed)})`,
+          textShadow: `0 8px 30px rgba(0,0,0,0.5), 0 0 ${40 * glow}px rgba(255,214,10,${0.8 * glow})`,
         }}
       >
         {text}
@@ -258,11 +281,25 @@ const Keyword: React.FC<{g: Graphic}> = ({g}) => {
   const slam = spring({frame, fps, config: {damping: 10, mass: 0.6, stiffness: 180}});
   const swipe = interpolate(frame, [3, 12], [0, 1], {...clamp, easing: Easing.out(Easing.cubic)});
   const words = g.headline.toUpperCase();
-  const size = fitSize(words, 150, 900);
+  // Heavy uppercase runs ~0.8em per character: one line if it fits, else two,
+  // and never smaller than the longest word needs to stay on one line.
+  const longest = Math.max(...words.split(/\s+/).map((w) => w.length), 1);
+  const size = Math.floor(Math.min(150, 840 / (0.8 * longest), Math.max(840 / (0.8 * words.length), 72)));
   return (
-    <AbsoluteFill style={{alignItems: 'center', top: '24%', height: 'auto'}}>
+    <div
+      style={{
+        position: 'absolute',
+        top: '22%',
+        left: '8%',
+        right: '8%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        transform: `translateY(${float(frame, 5)}px)`,
+      }}
+    >
       {g.label ? (
-        <div style={{fontSize: 40, fontWeight: 800, color: '#fff', textShadow: OUTLINE, marginBottom: 18, opacity: swipe}}>
+        <div style={{fontSize: 44, fontWeight: 800, color: '#fff', textShadow: OUTLINE, marginBottom: 22, opacity: swipe, textAlign: 'center'}}>
           {g.label}
         </div>
       ) : null}
@@ -272,18 +309,30 @@ const Keyword: React.FC<{g: Graphic}> = ({g}) => {
             position: 'absolute',
             left: -24,
             right: -24,
-            top: '18%',
-            bottom: '8%',
+            top: '10%',
+            bottom: '4%',
             background: COLORS.accent,
             transformOrigin: 'left center',
             transform: `scaleX(${swipe})`,
             borderRadius: 12,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
           }}
         />
-        <div style={{position: 'relative', fontSize: size, fontWeight: 900, color: COLORS.ink, padding: '0 8px', lineHeight: 1.15}}>
+        <div
+          style={{
+            position: 'relative',
+            fontSize: size,
+            fontWeight: 900,
+            color: COLORS.ink,
+            padding: '0 8px',
+            lineHeight: 1.1,
+            textAlign: 'center',
+            textWrap: 'balance',
+          }}
+        >
           {words}
         </div>
       </div>
-    </AbsoluteFill>
+    </div>
   );
 };

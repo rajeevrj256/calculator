@@ -20,9 +20,9 @@ import imageio_ffmpeg
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .config import Config
+from .config import MAX_SECONDS, Config
 from .llm import ask
-from .script_writer import AI_CLICHES, ReelScript
+from .script_writer import AI_CLICHES, ReelScript, word_range
 from .voice import SceneAudio
 
 log = logging.getLogger(__name__)
@@ -55,14 +55,28 @@ def check_script(script: ReelScript, cfg: Config) -> VerifyResult:
 
     words = len(narration.split())
     result.checks["word_count"] = words
-    low, high = cfg.target_seconds * 1.6, cfg.target_seconds * 3.4
-    if not low <= words <= high:
-        result.fail(f"Narration is {words} words; aim for {int(low)}-{int(high)} for a {cfg.target_seconds}s video.")
+    low, high = word_range(cfg.target_seconds)
+    if not low * 0.85 <= words <= high * 1.1:
+        result.fail(f"Narration is {words} words; use {low}-{high} for a {cfg.target_seconds}s video.")
 
-    if not 4 <= len(script.scenes) <= 12:
-        result.fail(f"{len(script.scenes)} scenes; use 6-9.")
+    if not 4 <= len(script.scenes) <= 8:
+        result.fail(f"{len(script.scenes)} scenes; use 5-7.")
     if re.search(r"https?://|www\.|[#@*_]", narration):
         result.fail("Narration contains URLs or symbols that text-to-speech will read out loud.")
+
+    graphics = [s.graphic for s in script.scenes if s.graphic.type != "none"]
+    result.checks["graphics"] = [g.type for g in graphics]
+    if not 2 <= len(graphics) <= 5:
+        result.fail(f"{len(graphics)} on-screen graphics; design 3 or 4.")
+    for i, scene in enumerate(script.scenes, 1):
+        g = scene.graphic
+        if g.type == "chart" and not 3 <= len(g.points) <= 6:
+            result.fail(f"Scene {i}: a chart needs 3-6 real data points, it has {len(g.points)}. "
+                        "Use a stat if there is only one number.")
+        if g.type == "compare" and len(g.points) != 2:
+            result.fail(f"Scene {i}: a compare needs exactly 2 points, it has {len(g.points)}.")
+        if g.type == "stat" and not re.search(r"\d", g.headline):
+            result.fail(f"Scene {i}: a stat headline must be a number, got '{g.headline}'. Use a keyword instead.")
     return result
 
 
@@ -97,8 +111,12 @@ def check_video(video: Path, scenes: list[SceneAudio], script: ReelScript, cfg: 
     if (info.get("width"), info.get("height")) != (cfg.width, cfg.height):
         result.fail(f"Resolution is {info.get('width')}x{info.get('height')}, expected {cfg.width}x{cfg.height}.")
     duration = info.get("duration", 0)
-    if not 10 <= duration <= max(90, cfg.target_seconds * 1.6):
-        result.fail(f"Duration {duration:.1f}s is outside the usable range.")
+    if duration > MAX_SECONDS:
+        words = sum(len(s.narration.split()) for s in script.scenes)
+        result.fail(f"Video is {duration:.1f}s; the limit is {MAX_SECONDS}s. Cut the narration from {words} "
+                    f"to about {int(words * (MAX_SECONDS - 2) / duration)} words.")
+    elif duration < 10:
+        result.fail(f"Video is only {duration:.1f}s long.")
     if not info.get("has_audio"):
         result.fail("Video has no audio track.")
 
@@ -166,14 +184,23 @@ def contact_sheet(video: Path, out_path: Path, frames: int = 6) -> Path:
     return out_path
 
 
+def _describe_graphic(g) -> str:
+    if g.type == "none":
+        return ""
+    points = ", ".join(f"{p.label}: {p.display}" for p in g.points)
+    return f"\n   [on-screen {g.type}: {g.headline!r}, {g.label}{f' ({points})' if points else ''}]"
+
+
 def review_with_claude(video: Path, script: ReelScript, cfg: Config,
                        stock_footage: bool = True) -> tuple[Review, VerifyResult]:
     sheet = contact_sheet(video, video.with_name("review_frames.jpg"))
-    narration = "\n".join(f"{i + 1}. {s.narration}" for i, s in enumerate(script.scenes))
+    narration = "\n".join(f"{i + 1}. {s.narration}{_describe_graphic(s.graphic)}"
+                          for i, s in enumerate(script.scenes))
     prompt = (
         f"The image is a contact sheet of 6 frames sampled evenly through the video, left to right, "
         f"top to bottom.\n\nOn-screen hook: {script.title}\nTopic: {script.topic}\n"
-        f"Facts used: {script.facts_checked}\n\nVoiceover by scene:\n{narration}\n\n"
+        f"Facts used: {script.facts_checked}\n\nVoiceover by scene, with the animated graphic shown "
+        f"on screen if any (its numbers are claims too):\n{narration}\n\n"
         f"Caption: {script.caption}\n\nScore it and list what to fix."
     )
     if not stock_footage:

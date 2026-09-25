@@ -23,6 +23,10 @@ def _load_dotenv(path: Path) -> None:
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _load_dotenv(PROJECT_ROOT / ".env")
 
+# Hard limit on video length. Longer targets are clamped and verify.py fails
+# any finished video over it.
+MAX_SECONDS = 30
+
 
 def _env(name: str, default: str = "") -> str:
     # Empty values (e.g. unset GitHub Actions variables) fall back to the default.
@@ -55,7 +59,7 @@ class Config:
     # Kokoro voice override, e.g. af_heart, am_michael, bm_george, hf_alpha. Empty = match REEL_VOICE.
     kokoro_voice: str = field(default_factory=lambda: _env("REEL_KOKORO_VOICE"))
     niche: str = field(default_factory=lambda: _env("REEL_NICHE"))
-    target_seconds: int = field(default_factory=lambda: int(_env("REEL_SECONDS", "40")))
+    target_seconds: int = field(default_factory=lambda: int(_env("REEL_SECONDS", str(MAX_SECONDS))))
 
     # Video settings (9:16 vertical, what Reels and Shorts expect).
     width: int = 1080
@@ -74,6 +78,12 @@ class Config:
     output_dir: Path = field(default_factory=lambda: Path(_env("REEL_OUTPUT_DIR", str(PROJECT_ROOT / "output"))))
     music_dir: Path = PROJECT_ROOT / "assets" / "music"
     font_path: str = field(default_factory=lambda: _env("REEL_FONT"))
+
+    def __setattr__(self, name, value):
+        # Env, .env and settings saved from the app all pass through here.
+        if name == "target_seconds":
+            value = max(10, min(int(value), MAX_SECONDS))
+        super().__setattr__(name, value)
 
 
 # Settings a user can change from the app; saved next to the videos.
