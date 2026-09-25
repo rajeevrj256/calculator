@@ -67,7 +67,10 @@ news, check what actually happened first (use web search if you have it); if you
 details, explain the background people are searching for instead of guessing.
 
 Topic choice: pick the candidate with the broadest appeal that works as a 30-60 second video. \
-Skip tragedies, deaths, violence, explicit content, and divisive political fights. Evergreen \
+Skip tragedies, deaths, violence, explicit content, politics and politicians, and rumours, \
+allegations or gossip about real people — anything where a wrong detail could mislead viewers \
+about a real person. Sports, science, tech, money, entertainment releases, weather and culture \
+are good fits. Evergreen \
 candidates are fallbacks — prefer a real trend when a good one exists."""
 
 

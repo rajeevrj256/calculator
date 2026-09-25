@@ -144,7 +144,7 @@ REVIEW_SYSTEM = """You are a strict short-form video editor reviewing a Reel/Sho
 You judge whether it feels made by a real human creator, hooks instantly, matches visuals to words, \
 and is accurate. Be honest and specific; don't pass mediocre work. Anything that would embarrass \
 the creator in the comments (a wrong fact, a line that contradicts another, a clickbait exaggeration) \
-is a blocking issue."""
+is a blocking issue, and so is stating an unconfirmed claim about a real person as fact."""
 
 
 def contact_sheet(video: Path, out_path: Path, frames: int = 6) -> Path:
