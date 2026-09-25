@@ -5,3 +5,4 @@ __pycache__/
 *TEMP_MPY_*
 assets/models
 .venv/
+remotion/node_modules/
