@@ -1,0 +1,77 @@
+"""Background footage for each scene: Pexels stock video, or a generated fallback."""
+
+from __future__ import annotations
+
+import logging
+import random
+from pathlib import Path
+
+import requests
+from PIL import Image, ImageDraw
+
+log = logging.getLogger(__name__)
+
+PALETTES = [
+    ((20, 20, 60), (120, 40, 160)),
+    ((10, 40, 70), (0, 150, 170)),
+    ((60, 10, 30), (220, 90, 60)),
+    ((15, 50, 30), (40, 170, 110)),
+    ((30, 30, 30), (90, 90, 140)),
+]
+
+
+def pexels_video(query: str, api_key: str, out_path: Path, min_height: int = 1280) -> Path | None:
+    """Download a portrait stock clip matching `query`, or return None."""
+    resp = requests.get(
+        "https://api.pexels.com/videos/search",
+        params={"query": query, "orientation": "portrait", "size": "medium", "per_page": 8},
+        headers={"Authorization": api_key},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    videos = resp.json().get("videos", [])
+    random.shuffle(videos)
+    for video in videos:
+        files = [f for f in video.get("video_files", [])
+                 if f.get("file_type") == "video/mp4" and (f.get("height") or 0) >= min_height
+                 and (f.get("width") or 0) < (f.get("height") or 0)]
+        if not files:
+            continue
+        # Smallest file that is still tall enough keeps downloads fast.
+        best = min(files, key=lambda f: f["height"])
+        with requests.get(best["link"], stream=True, timeout=60) as dl:
+            dl.raise_for_status()
+            with open(out_path, "wb") as fh:
+                for block in dl.iter_content(1 << 20):
+                    fh.write(block)
+        return out_path
+    return None
+
+
+def gradient_image(width: int, height: int, out_path: Path, seed: int) -> Path:
+    """A vertical two-colour gradient, used when no stock footage is available."""
+    top, bottom = PALETTES[seed % len(PALETTES)]
+    img = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(img)
+    for y in range(height):
+        t = y / (height - 1)
+        draw.line([(0, y), (width, y)], fill=tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    img.save(out_path)
+    return out_path
+
+
+def fetch_backgrounds(queries: list[str], api_key: str, width: int, height: int, out_dir: Path) -> list[Path]:
+    """One background per scene. Returns .mp4 paths (stock) or .png paths (fallback)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for i, query in enumerate(queries):
+        path = None
+        if api_key:
+            try:
+                path = pexels_video(query, api_key, out_dir / f"bg_{i:02d}.mp4")
+            except Exception as exc:
+                log.warning("Pexels failed for %r: %s", query, exc)
+        if path is None:
+            path = gradient_image(width, height, out_dir / f"bg_{i:02d}.png", seed=i)
+        paths.append(path)
+    return paths
