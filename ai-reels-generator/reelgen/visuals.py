@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import random
+import re
 from pathlib import Path
 
 import requests
@@ -30,8 +30,7 @@ def pexels_video(query: str, api_key: str, out_path: Path, used_ids: set[int],
         timeout=20,
     )
     resp.raise_for_status()
-    videos = resp.json().get("videos", [])
-    random.shuffle(videos)
+    videos = _relevant(query, resp.json().get("videos", []))
     for video in videos:
         if video.get("id") in used_ids:
             continue
@@ -50,6 +49,23 @@ def pexels_video(query: str, api_key: str, out_path: Path, used_ids: set[int],
         used_ids.add(video.get("id"))
         return out_path
     return None
+
+
+STOPWORDS = {"a", "an", "the", "of", "in", "on", "at", "and", "with", "to", "for", "from", "by", "up", "close", "closeup", "shot", "view"}
+
+
+def _words(text: str) -> set[str]:
+    return {w.rstrip("s") for w in re.findall(r"[a-z]+", text.lower()) if w not in STOPWORDS and len(w) > 2}
+
+
+def _relevant(query: str, videos: list[dict]) -> list[dict]:
+    """Keep results whose Pexels page slug (e.g. /video/a-boy-pitching-a-baseball-123/)
+    shares a word with the query, best match first; Pexels' own ranking breaks ties.
+    Its search is loose ("football stadium" can return baseball), and a clip that
+    visibly doesn't match the narration is the fastest way to look fake."""
+    wanted = _words(query)
+    scored = [(len(wanted & _words(v.get("url", ""))), i, v) for i, v in enumerate(videos)]
+    return [v for score, _, v in sorted(scored, key=lambda x: (-x[0], x[1])) if score > 0]
 
 
 def gradient_image(width: int, height: int, out_path: Path, seed: int) -> Path:

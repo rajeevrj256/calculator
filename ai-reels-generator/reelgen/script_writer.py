@@ -44,7 +44,7 @@ class Graphic(BaseModel):
 
 class Scene(BaseModel):
     narration: str = Field(description="What the voiceover says in this scene: 1-2 short spoken sentences.")
-    visual_queries: list[str] = Field(description="2-3 different English stock-footage search queries (2-4 words each) for quick cuts inside this scene, concrete and filmable, e.g. 'hands counting cash', 'mumbai street night'.")
+    visual_queries: list[str] = Field(description="2-3 different English stock-footage search queries (2-4 words each) for quick cuts inside this scene, concrete and filmable, e.g. 'hands counting cash', 'mumbai street night'. The stock library is literal and American English: write 'soccer' not 'football', and never name a real person, team, brand or event (it has no footage of them) - describe generic things that fit, like 'soccer stadium crowd' or 'coach on sideline', without implying the clip shows the person named.")
     graphic: Graphic = Field(description="The animated graphic shown over the footage in this scene, or type 'none'.")
 
 
