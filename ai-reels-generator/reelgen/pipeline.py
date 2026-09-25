@@ -18,7 +18,7 @@ from .config import MAX_SECONDS, Config
 from .notifier import notify
 from .script_writer import write_script
 from .trends import Trend, collect_trends, load_history, save_history
-from .verify import VerifyResult, check_script, check_video, review_with_claude
+from .verify import VerifyResult, check_script, check_video, fact_check_script, review_with_claude
 from .video import render_video, voice_seconds
 from .visuals import fetch_backgrounds
 from .voice import synthesize_scenes
@@ -26,6 +26,8 @@ from .voice import synthesize_scenes
 log = logging.getLogger(__name__)
 
 Progress = Callable[[str], None]
+
+FACT_FIXES = 2  # script rewrites allowed per attempt to fix fact-check findings
 
 
 def slugify(text: str, max_len: int = 40) -> str:
@@ -61,6 +63,24 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
             feedback = "\n".join(verdict.issues)
             continue
 
+        # Fact-check the words before paying for voice, footage and a render. A
+        # flagged script is fixed here (up to FACT_FIXES times) without using up
+        # an attempt; the final review then mostly judges the finished video.
+        for fix in range(FACT_FIXES + 1):
+            progress(f"{tag} Claude is fact-checking the script")
+            facts = fact_check_script(script, cfg)
+            if facts.passed or fix == FACT_FIXES:
+                break
+            progress(f"{tag} Fixing facts: {'; '.join(facts.issues)}")
+            fixes = facts.checks["fact_check"].get("fix_instructions", "")
+            fixed = write_script(cfg, candidates, "\n".join(facts.issues + ([fixes] if fixes else [])),
+                                 previous=script)
+            if not check_script(fixed, cfg).passed:
+                break  # keep the last script that passed the basic checks
+            script = fixed
+        if not facts.passed:
+            progress(f"{tag} Still has unconfirmed facts after rewriting: {'; '.join(facts.issues)}")
+
         progress(f"{tag} Recording voiceover")
         scenes = synthesize_scenes([s.narration for s in script.scenes], cfg.voice, run_dir / "audio",
                                    cfg.tts_engine, cfg.kokoro_voice)
@@ -87,6 +107,9 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
             stock = any(p.suffix == ".mp4" for clips in backgrounds for p in clips)
             _, review = review_with_claude(run_dir / "reel.mp4", script, cfg, stock_footage=stock)
             verdict = _merge(verdict, review)
+        if not facts.passed:  # unresolved fact-check findings also block "verified"
+            verdict.passed = False
+            verdict.issues += [i for i in facts.issues if i not in verdict.issues]
 
         attempt_result = {"script": script, "rendered": rendered, "verdict": verdict, "attempt": attempt}
         if best is None or (verdict.score or 0) >= (best["verdict"].score or 0):

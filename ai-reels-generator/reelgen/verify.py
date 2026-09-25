@@ -80,6 +80,38 @@ def check_script(script: ReelScript, cfg: Config) -> VerifyResult:
     return result
 
 
+class FactCheck(BaseModel):
+    blocking_issues: list[str] = Field(description="Every claim in the voiceover, hook or graphics that is wrong, outdated, exaggerated, a popular myth stated as fact, contradicted by another line, or a precise figure you could not confirm. Quote the line. Empty if none.")
+    fix_instructions: str = Field(description="Concrete rewrite instructions for exactly the flagged lines: what to say instead, or to drop the claim. Empty if none.")
+
+
+FACT_CHECK_SYSTEM = """You fact-check short-form video scripts before they are produced. Check every \
+factual claim in the voiceover, the on-screen hook and the graphics. Use web search to confirm \
+anything you are not certain of. Flag wrong or outdated facts, numbers that don't match sources, \
+lines that contradict each other, exaggerations and popular myths stated as fact ("we only use \
+10% of our brain"), and precise figures you cannot confirm. Don't comment on style. Be strict: a \
+viewer who knows the subject should find nothing to correct in the comments."""
+
+
+def fact_check_script(script: ReelScript, cfg: Config) -> VerifyResult:
+    """Catch factual problems before any voice, footage or rendering is spent on them."""
+    lines = [f"Hook on screen: {script.title}"]
+    for i, scene in enumerate(script.scenes, 1):
+        lines.append(f"Scene {i} voiceover: {scene.narration}")
+        g = scene.graphic
+        if g.type != "none":
+            pts = ", ".join(f"{p.label}={p.display}" for p in g.points)
+            lines.append(f"Scene {i} graphic ({g.type}): {g.headline} | {g.label}" + (f" | {pts}" if pts else ""))
+    prompt = (f"Topic: {script.topic}\nThe writer's sources: {script.facts_checked}\n\n" + "\n".join(lines)
+              + "\n\nFact-check this script.")
+    check = ask(cfg.ai_backend, cfg.claude_model, FACT_CHECK_SYSTEM, prompt, FactCheck, allow_web=True)
+    result = VerifyResult()
+    result.checks["fact_check"] = check.model_dump()
+    for issue in check.blocking_issues:
+        result.fail("Fact-check: " + issue)
+    return result
+
+
 # ---------- 2. technical ----------
 
 def _ffmpeg(args: list[str]) -> str:
