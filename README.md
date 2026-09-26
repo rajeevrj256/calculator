@@ -54,7 +54,7 @@ Set at least `PEXELS_API_KEY` (free at https://www.pexels.com/api/). For more sp
 
 ## Run everything
 
-- **Windows:** double-click **`start-all.bat`**. It opens one window each for Reel Studio, Remotion Studio and its layout server.
+- **Windows:** double-click **`start-all.bat`**, or in PowerShell type `.\start-all.bat` (PowerShell needs the `.\`). It opens one window each for Reel Studio, Remotion Studio and its layout server.
 - **Mac / Linux:** `./start-all.sh`. Ctrl+C stops everything; logs go to `logs/`.
 
 The first run installs everything, which takes a few minutes. After that:
