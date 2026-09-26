@@ -25,5 +25,6 @@ start "Layout server" /d remotion-studio cmd /k npm run layout-server
 
 echo.
 echo Starting... Reel Studio opens at http://localhost:8765 in a few seconds.
-timeout /t 8 >nul
+rem ping instead of timeout: timeout fails when started from VS Code or another non-console runner
+ping -n 9 127.0.0.1 >nul
 start "" http://localhost:8765
