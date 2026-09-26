@@ -209,9 +209,26 @@ def _render_remotion(cli: Path, props: dict, out_path: Path) -> None:
     chrome = os.environ.get("REEL_CHROME", "").strip()
     if chrome:
         cmd += [f"--browser-executable={chrome}", "--chrome-mode=chrome-for-testing"]
+    # Speed knobs for a strong local machine (see CLAUDE.md at the repo root):
+    # REEL_CONCURRENCY = frames rendered in parallel (default: Remotion picks half the cores),
+    # REEL_GL = browser GPU backend, e.g. "angle" on Windows/NVIDIA or "egl" on Linux,
+    # REEL_HWACCEL = "if-possible" to encode with the GPU where Remotion supports it.
+    for env, flag in (("REEL_CONCURRENCY", "--concurrency"), ("REEL_GL", "--gl"),
+                      ("REEL_HWACCEL", "--hardware-acceleration")):
+        value = os.environ.get(env, "").strip()
+        if value:
+            cmd.append(f"{flag}={value}")
     log.info("Rendering with Remotion: %s", " ".join(cmd))
     proc = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
+    gpu_encode = [a for a in cmd if a.startswith("--hardware-acceleration=")]
+    if (proc.returncode != 0 or not out_path.exists()) and gpu_encode:
+        # GPU encoding (NVENC) fails outright on machines without a usable NVIDIA GPU
+        # rather than falling back, so retry once with normal CPU encoding.
+        log.warning("GPU encoding failed; rendering again with CPU encoding")
+        cmd = [a for a in cmd if a not in gpu_encode]
+        proc = subprocess.run(cmd, cwd=REMOTION_DIR, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=1800, stdin=subprocess.DEVNULL)
     if proc.returncode != 0 or not out_path.exists():
         tail = (proc.stderr.strip() or proc.stdout.strip())[-1500:]
         raise RuntimeError(f"Remotion render failed ({proc.returncode}): {tail}")
