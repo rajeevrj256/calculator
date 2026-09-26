@@ -308,7 +308,8 @@ async function loadSettings() {
     if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === String(v))) el.add(new Option(v, v));
     el.value = v ?? "";
   }
-  const ai = { "claude-code": "Claude Code (your login)", api: st.api_key_set ? "Anthropic API key" : "API key — NOT SET" }[st.backend];
+  const ai = { "claude-code": "Claude Code (your login)", api: st.api_key_set ? "Anthropic API key" : "API key — NOT SET",
+    missing: "NOT SET UP — install Claude Code and run `claude` once" }[st.backend];
   $("#statusList").innerHTML = [
     ["AI in use", ai],
     ["Claude Code installed", st.claude_code_installed ? "Yes" : "No"],

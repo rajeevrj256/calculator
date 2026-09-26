@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from .config import EDITABLE, PROJECT_ROOT, Config, load_settings, save_settings
-from .llm import resolve_backend
+from .llm import INSTALL_HELP, describe_backend
 from .pipeline import run
 
 log = logging.getLogger(__name__)
@@ -173,7 +173,7 @@ def create_app(cfg: Config) -> FastAPI:
     def status():
         current = load_settings(Config())
         return {
-            "backend": resolve_backend(current.ai_backend),
+            "backend": describe_backend(current.ai_backend),
             "claude_code_installed": shutil.which("claude") is not None,
             "api_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
             "pexels": bool(current.pexels_api_key),
@@ -244,7 +244,10 @@ def print_banner(cfg: Config) -> None:
     for url in urls:
         print(f"  On your phone:     {url}   (same Wi-Fi)")
     print(f"  Videos are saved in: {cfg.output_dir}")
-    print(f"  AI: {resolve_backend(cfg.ai_backend)}")
+    ai = describe_backend(cfg.ai_backend)
+    print(f"  AI: {ai}")
+    if ai == "missing":
+        print(f"  WARNING: {INSTALL_HELP}")
     if not cfg.app_pin:
         print("  Tip: set REEL_APP_PIN in .env so only you can use the app on your network.")
     if urls:

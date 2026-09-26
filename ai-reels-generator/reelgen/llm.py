@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,10 +30,44 @@ class LLMError(RuntimeError):
     pass
 
 
+INSTALL_HELP = (
+    "Claude Code was not found on this computer, and no ANTHROPIC_API_KEY is set. "
+    "Install Claude Code (Windows PowerShell: irm https://claude.ai/install.ps1 | iex; "
+    "Mac/Linux: curl -fsSL https://claude.ai/install.sh | bash), open a NEW terminal, run `claude` "
+    "once to log in, then restart Reel Studio. (The Claude desktop chat app can't be used by other programs.)"
+)
+
+
+def find_claude() -> str | None:
+    """The Claude Code CLI: on PATH, or in the installer's folder when PATH hasn't been
+    refreshed yet (common right after installing on Windows)."""
+    found = shutil.which("claude")
+    if found:
+        return found
+    home = Path.home()
+    for candidate in (home / ".local" / "bin" / "claude.exe", home / ".local" / "bin" / "claude",
+                      home / "AppData" / "Roaming" / "npm" / "claude.cmd"):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def describe_backend(backend: str) -> str:
+    """Like resolve_backend, but "missing" instead of raising (for status displays)."""
+    try:
+        return resolve_backend(backend)
+    except LLMError:
+        return "missing"
+
+
 def resolve_backend(backend: str) -> str:
     if backend in ("claude-code", "api"):
         return backend
-    return "claude-code" if shutil.which("claude") else "api"
+    if find_claude():
+        return "claude-code"
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "api"
+    raise LLMError(INSTALL_HELP)
 
 
 def ask(backend: str, model: str, system: str, prompt: str, schema: type[T],
@@ -45,6 +80,9 @@ def ask(backend: str, model: str, system: str, prompt: str, schema: type[T],
 
 def _ask_claude_code(model: str, system: str, prompt: str, schema: type[T], images: list[Path],
                      allow_web: bool, cwd: Path | None) -> T:
+    claude = find_claude()
+    if claude is None:
+        raise LLMError(INSTALL_HELP)
     tools = []
     if images:
         tools.append("Read")
@@ -54,7 +92,7 @@ def _ask_claude_code(model: str, system: str, prompt: str, schema: type[T], imag
         tools += ["WebSearch", "WebFetch"]
 
     cmd = [
-        "claude", "-p", prompt,
+        claude, "-p", prompt,
         "--output-format", "json",
         "--json-schema", json.dumps(schema.model_json_schema()),
         "--append-system-prompt", system,
