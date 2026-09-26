@@ -46,6 +46,13 @@ class Scene(BaseModel):
     narration: str = Field(description="What the voiceover says in this scene: 1-2 short spoken sentences.")
     visual_queries: list[str] = Field(description="2-3 different English stock-footage search queries (2-4 words each) for quick cuts inside this scene, concrete and filmable, e.g. 'hands counting cash', 'mumbai street night'. The stock library is literal and American English: write 'soccer' not 'football', and never name a real person, team, brand or event (it has no footage of them) - describe generic things that fit, like 'soccer stadium crowd' or 'coach on sideline', without implying the clip shows the person named. The same goes for a specific landmark, artifact or rare animal: ask for close-ups or context that can't be mistaken for something else ('rusted iron texture', 'brass gears macro', 'coral reef closeup') rather than a different object that looks like a stand-in.")
     graphic: Graphic = Field(description="The animated graphic shown over the footage in this scene, or type 'none'.")
+    transition: Literal["flash", "zoom", "slide", "glitch", "fade"] = Field(
+        default="flash",
+        description="How this scene cuts in from the previous one (ignored for scene 1). 'flash': white flash + "
+                    "whoosh, for a big reveal. 'zoom': punch-in with an impact hit, for a hard fact or number. "
+                    "'slide': fast whip-pan, for the next item in a list. 'glitch': digital stutter, for tech "
+                    "or a shocking twist. 'fade': soft dissolve with a shimmer, for calm, nature, history or "
+                    "an emotional beat.")
 
 
 class ReelScript(BaseModel):
@@ -86,6 +93,11 @@ types: a stat for one striking number, a chart for a change over time, a compare
 or A vs B, a keyword for the scene's one-word punch. Every number in a graphic must be real, \
 sourced, and match what the narration says; no made-up, estimated or illustrative data points. \
 If you don't have real figures for a chart, use a stat or a keyword instead.
+
+Transitions: each scene after the first cuts in with a transition that has its own sound. Pick 2 \
+to 4 different kinds that suit this video's mood and what each scene does, and never use the same \
+one twice in a row: a list video might alternate slide and zoom, a tech story glitch and flash, a \
+nature or history piece fade and zoom.
 
 Accuracy: only state facts you are confident about or have looked up. If a trend is breaking \
 news, check what actually happened first (use web search if you have it); if you can't confirm \

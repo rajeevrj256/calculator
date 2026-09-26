@@ -38,7 +38,8 @@ cd ../../remotion-studio && npm run studio / npm run typecheck
 | `verify.py` | Script checks, fact-check (web search), ffmpeg checks (≤30s, audio, black frames, captions), Claude review of a 6-frame contact sheet. |
 | `voice.py` | edge-tts (online, exact word timings) with Kokoro fallback (offline ONNX, estimated timings). |
 | `visuals.py` | Pexels search. Keeps only results whose page slug shares a word with the query. |
-| `video.py` | Builds props and runs `remotion render` in `ai-reels-generator/remotion/`; falls back to moviepy. |
+| `video.py` | Builds props and runs `remotion render` in `ai-reels-generator/remotion/`; falls back to moviepy. `plan_transitions` keeps Claude's per-scene transition (flash/zoom/slide/glitch/fade) but forbids repeats and forces 2+ kinds. |
+| `sfx.py` | Synthesised sounds, one per transition (whoosh, impact, swish, glitch, shimmer) plus a pop for graphics. No audio files. |
 | `server.py`, `web/` | Local app, job queue, daily schedule, PIN. |
 
 The reels editor is `ai-reels-generator/remotion/` (Remotion **4.0.529**, pinned; the

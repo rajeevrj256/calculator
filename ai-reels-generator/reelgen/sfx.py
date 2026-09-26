@@ -1,7 +1,11 @@
 """Short sound effects for the edit, synthesised on the fly so there are no audio
 files to ship or license.
 
-- whoosh: a soft swell of filtered air for scene changes and the hook title.
+- whoosh: a soft swell of filtered air (flash transition and the hook title).
+- impact: a short low boom (zoom transition).
+- swish: a fast, bright air swipe (slide transition).
+- glitch: a digital stutter of clicks and noise bursts (glitch transition).
+- shimmer: a soft rising chime (fade transition).
 - pop: a quick, rounded blip for when a graphic lands.
 
 Neither has leading silence: sound starts on the first sample, so each hit lands
@@ -53,9 +57,63 @@ def _pop(duration: float = 0.12) -> np.ndarray:
     return tone * envelope
 
 
+def _impact(duration: float = 0.55) -> np.ndarray:
+    t = np.arange(int(RATE * duration)) / RATE
+    freq = 45 + 110 * np.exp(-t * 18)  # a thump that drops in pitch
+    body = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * np.exp(-t * 7)
+    click = np.random.default_rng(3).standard_normal(len(t)) * np.exp(-t * 90) * 0.35  # the attack
+    return (body + click) * np.minimum(t / 0.001, 1)
+
+
+def _swish(duration: float = 0.22) -> np.ndarray:
+    # A whoosh squeezed shorter and brighter: a camera whip rather than air.
+    n = int(RATE * duration)
+    x = np.arange(n) / n
+    noise = np.random.default_rng(11).standard_normal(n)
+    cutoff = 1200 + 6500 * np.sin(np.pi * x) ** 2
+    alpha = 1 - np.exp(-2 * np.pi * cutoff / RATE)
+    out = np.empty(n)
+    y = 0.0
+    for i in range(n):
+        y += alpha[i] * (noise[i] - y)
+        out[i] = y
+    return out * np.sin(np.pi * x) ** 0.7
+
+
+def _glitch(duration: float = 0.3) -> np.ndarray:
+    rng = np.random.default_rng(5)
+    n = int(RATE * duration)
+    out = np.zeros(n)
+    pos = 0
+    while pos < n:  # alternating bursts of crushed noise, square tone and silence
+        length = int(RATE * rng.uniform(0.012, 0.04))
+        kind = rng.integers(0, 3)
+        seg = np.arange(min(length, n - pos))
+        if kind == 0:
+            out[pos:pos + len(seg)] = np.round(rng.standard_normal(len(seg)) * 3) / 3
+        elif kind == 1:
+            out[pos:pos + len(seg)] = np.sign(np.sin(2 * np.pi * rng.uniform(300, 1400) * seg / RATE)) * 0.6
+        pos += length
+    return out * np.linspace(1, 0.4, n)
+
+
+def _shimmer(duration: float = 0.7) -> np.ndarray:
+    t = np.arange(int(RATE * duration)) / RATE
+    tone = np.zeros_like(t)
+    for k, f in enumerate((880, 1320, 1760, 2640)):  # a soft chord that blooms in, one note at a time
+        onset = k * 0.05
+        env = np.clip((t - onset) / 0.04, 0, 1) * np.exp(-np.clip(t - onset, 0, None) * 5)
+        tone += np.sin(2 * np.pi * f * t) * env / (k + 1)
+    return tone
+
+
 def write_sfx(out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     return {
         "whoosh": _write(out_dir / "whoosh.wav", _whoosh()),
+        "impact": _write(out_dir / "impact.wav", _impact(), peak=0.6),
+        "swish": _write(out_dir / "swish.wav", _swish(), peak=0.45),
+        "glitch": _write(out_dir / "glitch.wav", _glitch(), peak=0.35),
+        "shimmer": _write(out_dir / "shimmer.wav", _shimmer(), peak=0.3),
         "pop": _write(out_dir / "pop.wav", _pop(), peak=0.45),
     }

@@ -89,7 +89,7 @@ def plan_timeline(scenes: list[SceneAudio]) -> Timeline:
 
 
 def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], cfg: Config,
-                 out_path: Path, graphics: list | None = None) -> dict:
+                 out_path: Path, graphics: list | None = None, transitions: list[str] | None = None) -> dict:
     """Render to `out_path`. Every input file must live inside out_path's folder,
     which is the public dir Remotion serves them from."""
     timeline = plan_timeline(scenes)
@@ -100,7 +100,7 @@ def render_video(title: str, scenes: list[SceneAudio], backgrounds: list[list[Pa
         if cli is None:
             raise RuntimeError("Node.js or the Remotion packages are not installed (run start.bat / start.sh)")
         props = build_props(title, scenes, backgrounds, graphics or [None] * len(scenes), timeline, cfg,
-                            out_path.parent)
+                            out_path.parent, transitions)
         _render_remotion(cli, props, out_path)
     except Exception as exc:
         log.warning("Remotion edit unavailable, using the simpler moviepy edit: %s", exc)
@@ -139,16 +139,38 @@ def _graphic(g) -> dict:
     return data
 
 
+TRANSITIONS = ("flash", "zoom", "slide", "glitch", "fade")
+
+
+def plan_transitions(requested: list[str] | None, count: int) -> list[str]:
+    """The transition into each scene ("none" for the first). Keeps Claude's choices, but
+    never the same one twice in a row, and at least two kinds when there are 3+ cuts, so
+    scene changes never all look and sound alike."""
+    wanted = [t if t in TRANSITIONS else "flash" for t in (requested or [])]
+    wanted += ["flash"] * (count - len(wanted))
+    out = ["none"]
+    for i in range(1, count):
+        t = wanted[i]
+        if t == out[-1]:  # swap a repeat for the next kind in the list
+            t = TRANSITIONS[(TRANSITIONS.index(t) + 1) % len(TRANSITIONS)]
+        out.append(t)
+    if count >= 4 and len(set(out[1:])) < 2:
+        out = ["none"] + [TRANSITIONS[i % 2] for i in range(count - 1)]
+    return out
+
+
 def build_props(title: str, scenes: list[SceneAudio], backgrounds: list[list[Path]], graphics: list,
-                timeline: Timeline, cfg: Config, public_dir: Path) -> dict:
+                timeline: Timeline, cfg: Config, public_dir: Path, transitions: list[str] | None = None) -> dict:
     """Everything the Reel composition needs (see remotion/src/types.ts). Times in seconds."""
     def rel(path: Path) -> str:  # paths in props are relative to the public dir
         return Path(path).resolve().relative_to(public_dir.resolve()).as_posix()
 
+    kinds = plan_transitions(transitions, len(scenes))
     scene_props, cuts, captions = [], [], []
     for i, (scene, clips, start, duration) in enumerate(zip(scenes, backgrounds, timeline.starts, timeline.durations)):
         scene_props.append({"start": start, "duration": duration, "audio": rel(scene.path),
-                            "graphic": _graphic(graphics[i] if i < len(graphics) else None)})
+                            "graphic": _graphic(graphics[i] if i < len(graphics) else None),
+                            "transition": kinds[i]})
 
         per_clip = duration / len(clips)
         for j, clip in enumerate(clips):

@@ -11,7 +11,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
-import type {Cut} from './types';
+import type {Cut, Transition} from './types';
 import {clamp} from './theme';
 import {Layer} from './Layer';
 
@@ -19,7 +19,9 @@ import {Layer} from './Layer';
 // punch in tighter, every cut keeps a slow push so nothing sits still, a white
 // flash marks each new scene, and a dark gradient keeps text readable on top.
 
-export const Background: React.FC<{cuts: Cut[]; sceneStarts: number[]}> = ({cuts, sceneStarts}) => {
+export type SceneTransition = {start: number; type: Transition};
+
+export const Background: React.FC<{cuts: Cut[]; transitions: SceneTransition[]}> = ({cuts, transitions}) => {
   const {fps} = useVideoConfig();
   return (
     <Layer name="background" style={{backgroundColor: '#0B0B0F', overflow: 'hidden'}}>
@@ -27,9 +29,11 @@ export const Background: React.FC<{cuts: Cut[]; sceneStarts: number[]}> = ({cuts
         // Frame edges from absolute times, so neighbouring cuts meet with no gap or overlap.
         const from = Math.round(cut.start * fps);
         const frames = Math.max(1, Math.round((cut.start + cut.duration) * fps) - from);
+        // The first cut of a scene carries that scene's entrance.
+        const enter = transitions.find((t) => Math.abs(t.start - cut.start) < 0.02)?.type ?? 'none';
         return (
           <Sequence key={i} name={`cut ${i + 1}`} from={from} durationInFrames={frames}>
-            <CutView cut={cut} index={i} frames={frames} />
+            <CutView cut={cut} index={i} frames={frames} enter={enter} />
           </Sequence>
         );
       })}
@@ -42,16 +46,22 @@ export const Background: React.FC<{cuts: Cut[]; sceneStarts: number[]}> = ({cuts
       />
       <Vignette />
       <Grain />
-      {sceneStarts.slice(1).map((t, i) => (
-        <Sequence key={i} name={`flash ${i + 2}`} from={Math.round(t * fps)} durationInFrames={10}>
-          <Flash />
-        </Sequence>
-      ))}
+      {transitions.map((t, i) =>
+        t.type === 'flash' ? (
+          <Sequence key={i} name={`flash ${i + 1}`} from={Math.round(t.start * fps)} durationInFrames={10}>
+            <Flash />
+          </Sequence>
+        ) : t.type === 'glitch' ? (
+          <Sequence key={i} name={`glitch ${i + 1}`} from={Math.round(t.start * fps)} durationInFrames={GLITCH_FRAMES}>
+            <GlitchBars />
+          </Sequence>
+        ) : null,
+      )}
     </Layer>
   );
 };
 
-const CutView: React.FC<{cut: Cut; index: number; frames: number}> = ({cut, index, frames}) => {
+const CutView: React.FC<{cut: Cut; index: number; frames: number; enter: Transition}> = ({cut, index, frames, enter}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
 
@@ -66,7 +76,7 @@ const CutView: React.FC<{cut: Cut; index: number; frames: number}> = ({cut, inde
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-    transform: `scale(${base + push})`,
+    ...entrance(enter, frame, base + push),
   };
 
   if (!cut.src) return <Placeholder index={index} style={style} />;
@@ -80,6 +90,73 @@ const CutView: React.FC<{cut: Cut; index: number; frames: number}> = ({cut, inde
     return <Loop durationInFrames={Math.max(1, Math.floor(cut.length * fps))}>{video(0)}</Loop>;
   }
   return video(Math.round(cut.offset * fps));
+};
+
+// ---- Scene entrances. Each has its own look (and its own sound, see Reel.tsx),
+// so scene changes don't all feel the same. Claude picks them per scene.
+const GLITCH_FRAMES = 8;
+
+// A cheap deterministic "random" in [-1, 1], so every render is identical.
+const jitter = (n: number) => {
+  const f = Math.sin(n * 12.9898) * 43758.5453;
+  return (f - Math.floor(f)) * 2 - 1;
+};
+
+const entrance = (type: Transition, frame: number, scale: number): React.CSSProperties => {
+  const ease = (len: number, fn = Easing.out(Easing.cubic)) => interpolate(frame, [0, len], [0, 1], {...clamp, easing: fn});
+  if (type === 'zoom') {
+    // Punch in from a blurred close-up.
+    const p = ease(9);
+    return {transform: `scale(${scale * (1 + 0.35 * (1 - p))})`, filter: `blur(${10 * (1 - p)}px)`};
+  }
+  if (type === 'slide') {
+    // Whip-pan: the new shot rushes in from the right, smeared, oversized so no edge shows.
+    const p = ease(8);
+    return {
+      // Scaling up by twice the offset keeps the frame covered: no empty strip at the edge.
+      transform: `translateX(${30 * (1 - p)}%) scale(${scale * (1 + 0.64 * (1 - p))})`,
+      filter: `blur(${14 * (1 - p)}px)`,
+    };
+  }
+  if (type === 'glitch' && frame < GLITCH_FRAMES) {
+    // A few frames of jumps, colour shifts and crushed contrast.
+    return {
+      transform: `translate(${jitter(frame) * 40}px, ${jitter(frame + 7) * 10}px) scale(${scale * 1.06})`,
+      filter: `hue-rotate(${Math.round(jitter(frame + 3) * 90)}deg) saturate(2) contrast(1.4)`,
+    };
+  }
+  if (type === 'fade') {
+    // Soft dissolve up from dark.
+    const p = ease(14, Easing.out(Easing.quad));
+    return {transform: `scale(${scale})`, filter: `brightness(${0.15 + 0.85 * p}) blur(${16 * (1 - p)}px)`};
+  }
+  return {transform: `scale(${scale})`};
+};
+
+// Glitch overlay: bright horizontal slices in split RGB colours that jump every frame.
+const GlitchBars: React.FC = () => {
+  const frame = useCurrentFrame();
+  const fade = interpolate(frame, [0, GLITCH_FRAMES - 1], [1, 0], clamp);
+  return (
+    <Layer name="glitch-bars" style={{mixBlendMode: 'screen', opacity: fade}}>
+      {[0, 1, 2, 3, 4].map((k) => {
+        const top = 50 + jitter(frame * 5 + k) * 48;
+        return (
+          <div
+            key={k}
+            style={{
+              position: 'absolute',
+              left: `${jitter(frame + k * 3) * 10}%`,
+              width: '100%',
+              top: `${top}%`,
+              height: 8 + Math.abs(jitter(frame * 3 + k)) * 60,
+              background: k % 2 ? 'rgba(0,255,255,0.55)' : 'rgba(255,0,200,0.5)',
+            }}
+          />
+        );
+      })}
+    </Layer>
+  );
 };
 
 // Clean fallback when there is no footage: a slow-moving two-tone gradient.

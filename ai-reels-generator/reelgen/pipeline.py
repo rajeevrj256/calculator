@@ -98,7 +98,8 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
                                         cfg.width, cfg.height, run_dir / "backgrounds")
         progress(f"{tag} Editing the video (takes a few minutes)")
         rendered = render_video(script.title, scenes, backgrounds, cfg, run_dir / "reel.mp4",
-                                graphics=[s.graphic for s in script.scenes])
+                                graphics=[s.graphic for s in script.scenes],
+                                transitions=[s.transition for s in script.scenes])
 
         progress(f"{tag} Verifying video quality")
         verdict = check_video(run_dir / "reel.mp4", scenes, script, cfg)

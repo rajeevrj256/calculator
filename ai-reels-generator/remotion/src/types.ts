@@ -25,7 +25,10 @@ export type Graphic = {
   points: Point[];
 };
 
-export type Scene = {start: number; duration: number; audio: string | null; graphic: Graphic};
+// How a scene cuts in from the previous one; the first scene is always 'none'.
+export type Transition = 'none' | 'flash' | 'zoom' | 'slide' | 'glitch' | 'fade';
+
+export type Scene = {start: number; duration: number; audio: string | null; graphic: Graphic; transition: Transition};
 
 export type ReelProps = {
   title: string;
@@ -36,5 +39,5 @@ export type ReelProps = {
   captions: CaptionGroup[];
   music: string | null;
   // Short sound effects synced to scene changes and graphic entrances; null = silent.
-  sfx: {whoosh: string; pop: string} | null;
+  sfx: {whoosh: string; impact: string; swish: string; glitch: string; shimmer: string; pop: string} | null;
 };

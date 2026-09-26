@@ -13,6 +13,15 @@ import {Captions} from './Captions';
 // sound effects. Every time comes from the props in seconds.
 
 const TITLE_SECONDS = 2.6;
+
+// Sound for each scene transition: which effect, how many frames early, how loud.
+const TRANSITION_SOUND: Record<string, {name: 'whoosh' | 'impact' | 'swish' | 'glitch' | 'shimmer'; lead: number; volume: number}> = {
+  flash: {name: 'whoosh', lead: 3, volume: 0.28},
+  zoom: {name: 'impact', lead: 0, volume: 0.4},
+  slide: {name: 'swish', lead: 2, volume: 0.3},
+  glitch: {name: 'glitch', lead: 0, volume: 0.22},
+  fade: {name: 'shimmer', lead: 2, volume: 0.2},
+};
 const MIN_GRAPHIC_SECONDS = 1.4; // shorter than this and it can't finish animating
 const GRAPHIC_DELAY = 4; // frames after the cut, so the flash lands first
 
@@ -32,7 +41,7 @@ export const Reel: React.FC<ReelProps> = ({title, scenes, cuts, captions, music,
 
   return (
     <Layer name="reel" style={{backgroundColor: COLORS.ink}}>
-      <Background cuts={cuts} sceneStarts={scenes.map((s) => s.start)} />
+      <Background cuts={cuts} transitions={scenes.map((s) => ({start: s.start, type: s.transition ?? 'flash'}))} />
 
       {graphics.map(({from, frames, graphic, scene}) => (
         <Sequence key={scene} name={`graphic scene ${scene + 1}`} from={from} durationInFrames={frames}>
@@ -75,17 +84,21 @@ export const Reel: React.FC<ReelProps> = ({title, scenes, cuts, captions, music,
           <Sequence name="sfx whoosh (title)" durationInFrames={f(1)}>
             <Html5Audio src={staticFile(sfx.whoosh)} volume={0.22} />
           </Sequence>
-          {scenes.slice(1).map((s, i) => (
-            // Starts a few frames early so the swell peaks on the cut.
-            <Sequence
-              key={`w${i}`}
-              name={`sfx whoosh ${i + 2}`}
-              from={Math.max(0, f(s.start) - 3)}
-              durationInFrames={f(1)}
-            >
-              <Html5Audio src={staticFile(sfx.whoosh)} volume={0.28} />
-            </Sequence>
-          ))}
+          {scenes.slice(1).map((s, i) => {
+            // Each transition has its own sound. Swells start a few frames early so they
+            // peak on the cut; hits start exactly on it.
+            const cue = TRANSITION_SOUND[s.transition ?? 'flash'] ?? TRANSITION_SOUND.flash;
+            return (
+              <Sequence
+                key={`t${i}`}
+                name={`sfx ${cue.name} ${i + 2}`}
+                from={Math.max(0, f(s.start) - cue.lead)}
+                durationInFrames={f(1)}
+              >
+                <Html5Audio src={staticFile(sfx[cue.name])} volume={cue.volume} />
+              </Sequence>
+            );
+          })}
           {graphics.map(({from, scene}) => (
             <Sequence key={`p${scene}`} name={`sfx pop ${scene + 1}`} from={from + 3} durationInFrames={f(0.5)}>
               <Html5Audio src={staticFile(sfx.pop)} volume={0.35} />

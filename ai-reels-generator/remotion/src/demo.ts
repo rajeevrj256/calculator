@@ -11,6 +11,8 @@ import type {CaptionGroup, Cut, Graphic, ReelProps, Scene} from './types';
 const FPS = 30;
 const SECONDS_PER_WORD = 0.34;
 const PAD = 0.25;
+// Every transition once, so Studio previews them all.
+const DEMO_TRANSITIONS = ['zoom', 'slide', 'glitch', 'fade', 'flash'] as const;
 
 const none: Graphic = {type: 'none', headline: '', label: '', points: []};
 
@@ -62,7 +64,7 @@ const build = (): ReelProps => {
   SCRIPT.forEach(({narration, graphic}, i) => {
     const words = narration.split(' ');
     const duration = words.length * SECONDS_PER_WORD + PAD;
-    scenes.push({start: t, duration, audio: null, graphic});
+    scenes.push({start: t, duration, audio: null, graphic, transition: i === 0 ? 'none' : DEMO_TRANSITIONS[(i - 1) % 5]});
     const half = duration / 2;
     for (let j = 0; j < 2; j++) {
       cuts.push({
