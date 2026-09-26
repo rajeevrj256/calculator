@@ -16,6 +16,7 @@ from typing import Callable
 
 from .config import MAX_SECONDS, Config
 from .notifier import notify
+from .post_copy import clean_tags, save_post_text, write_post_copy
 from .script_writer import write_script
 from .trends import Trend, collect_trends, load_history, save_history
 from .verify import VerifyResult, check_script, check_video, fact_check_script, review_with_claude
@@ -157,6 +158,22 @@ def run_once(cfg: Config, topic: str | None = None, progress: Progress = log.inf
         "duration_seconds": best["rendered"]["duration_seconds"],
         "editor": best["rendered"].get("editor", ""),
     }
+    progress("Claude is writing the title, description and trending hashtags")
+    try:
+        post = write_post_copy(script, cfg)
+        report.update({
+            "caption": post.instagram_caption,
+            "hashtags": clean_tags(post.instagram_hashtags),
+            "youtube_title": post.youtube_title,
+            "youtube_description": post.youtube_description,
+            "youtube_hashtags": clean_tags(post.youtube_hashtags),
+            "youtube_tags": [t.strip().lstrip("#") for t in post.youtube_tags if t.strip()],
+            "hashtag_notes": post.hashtag_notes,
+        })
+    except Exception as exc:  # keep the script's draft text rather than lose the video
+        log.warning("Post text step failed, keeping the draft caption: %s", exc)
+        report.update({"youtube_description": script.caption, "youtube_hashtags": ["shorts"], "youtube_tags": []})
+    save_post_text(report, final_dir)
     (final_dir / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     save_history(history_path, script.topic)
 

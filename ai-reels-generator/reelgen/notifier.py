@@ -20,14 +20,14 @@ def verification_line(report: dict) -> str:
 
 
 def format_message(report: dict) -> str:
-    tags = " ".join(f"#{h}" for h in report["hashtags"])
+    from .post_copy import post_text
+
     return (
         f"🎬 New reel ready\n{verification_line(report)}\n\n"
         f"Topic: {report['topic']} ({report['topic_source']})\n"
         f"Why: {report['why_chosen']}\n"
         f"Length: {report['duration_seconds']}s\n\n"
-        f"YouTube title:\n{report['youtube_title']}\n\n"
-        f"Caption:\n{report['caption']}\n\n{tags}"
+        + post_text(report)
     )
 
 

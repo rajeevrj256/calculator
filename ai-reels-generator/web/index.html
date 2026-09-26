@@ -87,6 +87,10 @@
   .details .sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
   .verdict { border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
   .verdict.ok { background: rgba(61,220,132,.12); color: var(--ok); } .verdict.warn { background: rgba(255,159,10,.12); color: var(--warn); }
+  .section { margin: 20px 0 4px; font-size: 15px; color: var(--accent); }
+  .copyhead { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .copyhead label { margin: 0; }
+  button.mini { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
   .copybox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; white-space: pre-wrap; font-size: 14px; margin-bottom: 8px; }
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
   .actions a { text-decoration: none; text-align: center; }
@@ -242,6 +246,9 @@ async function openVideo(id) {
   $("#video").poster = "/media/" + encodeURIComponent(id) + "/thumbnail.jpg";
   $("#video").src = src;
   const tags = (v.hashtags || []).map((h) => "#" + h).join(" ");
+  const igText = `${v.caption}\n\n${tags}`;
+  const ytDesc = `${v.youtube_description || v.caption}\n\n${(v.youtube_hashtags || ["shorts"]).map((h) => "#" + h).join(" ")}`;
+  const ytTags = (v.youtube_tags || []).join(", ");
   const verdict = v.verified
     ? `<div class="verdict ok">✅ Verified automatically — score ${esc(v.score)}/10</div>`
     : `<div class="verdict warn">⚠️ Didn't pass every check. Watch it before posting.<br>${(v.issues || []).map(esc).join("<br>")}</div>`;
@@ -251,20 +258,25 @@ async function openVideo(id) {
     ${verdict}
     <div class="actions">
       <a href="${src}" download="${esc(id)}.mp4"><button>⬇ Save video</button></a>
-      <button id="copyCaption">Copy caption</button>
-      <button id="copyTitle">Copy YouTube title</button>
       <button class="danger" id="deleteVideo">Delete</button>
     </div>
-    <label>Caption + hashtags</label>
-    <div class="copybox">${esc(v.caption)}\n\n${esc(tags)}</div>
-    <label>YouTube title</label>
+    <h4 class="section">Instagram Reels</h4>
+    <div class="copyhead"><label>Caption + hashtags</label><button class="mini" data-copy="ig">Copy</button></div>
+    <div class="copybox">${esc(igText)}</div>
+    <h4 class="section">YouTube Shorts</h4>
+    <div class="copyhead"><label>Title</label><button class="mini" data-copy="ytTitle">Copy</button></div>
     <div class="copybox">${esc(v.youtube_title)}</div>
+    <div class="copyhead"><label>Description + hashtags</label><button class="mini" data-copy="ytDesc">Copy</button></div>
+    <div class="copybox">${esc(ytDesc)}</div>
+    ${ytTags ? `<div class="copyhead"><label>Tags (YouTube Tags field)</label><button class="mini" data-copy="ytTags">Copy</button></div>
+    <div class="copybox">${esc(ytTags)}</div>` : ""}
+    ${v.hashtag_notes ? `<div class="hint">Hashtags: ${esc(v.hashtag_notes)}</div>` : ""}
     <label>Why this topic</label>
     <div class="copybox">${esc(v.why_chosen)}</div>
     <label>Facts used</label>
     <div class="copybox">${esc(v.facts_checked)}</div>`;
-  $("#copyCaption").onclick = () => copy(`${v.caption}\n\n${tags}`);
-  $("#copyTitle").onclick = () => copy(v.youtube_title);
+  const texts = {ig: igText, ytTitle: v.youtube_title, ytDesc, ytTags};
+  document.querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => copy(texts[b.dataset.copy]));
   $("#deleteVideo").onclick = async () => {
     if (!confirm("Delete this video from your computer?")) return;
     await api("/api/videos/" + encodeURIComponent(id), { method: "DELETE" });
