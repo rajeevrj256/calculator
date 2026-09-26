@@ -1,0 +1,70 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "For",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "almost",
+                      "startMs":  371
+                  },
+                  {
+                      "text":  "everyone",
+                      "startMs":  936
+                  },
+                  {
+                      "text":  "UPI",
+                      "startMs":  2156
+                  },
+                  {
+                      "text":  "is",
+                      "startMs":  2790
+                  },
+                  {
+                      "text":  "exactly",
+                      "startMs":  2996
+                  },
+                  {
+                      "text":  "as",
+                      "startMs":  3685
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  3899
+                  },
+                  {
+                      "text":  "as",
+                      "startMs":  4167
+                  },
+                  {
+                      "text":  "before",
+                      "startMs":  4388
+                  },
+                  {
+                      "text":  "So",
+                      "startMs":  6055
+                  },
+                  {
+                      "text":  "who",
+                      "startMs":  6944
+                  },
+                  {
+                      "text":  "should",
+                      "startMs":  7123
+                  },
+                  {
+                      "text":  "pay",
+                      "startMs":  7385
+                  },
+                  {
+                      "text":  "for",
+                      "startMs":  7633
+                  },
+                  {
+                      "text":  "free",
+                      "startMs":  7846
+                  }
+              ],
+    "scene":  9,
+    "text":  "For almost everyone, UPI is exactly as free as before. So, who should pay for free?"
+}

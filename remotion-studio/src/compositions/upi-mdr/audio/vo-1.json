@@ -1,0 +1,62 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "You",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "scan",
+                      "startMs":  296
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  674
+                  },
+                  {
+                      "text":  "QR",
+                      "startMs":  750
+                  },
+                  {
+                      "text":  "code",
+                      "startMs":  1239
+                  },
+                  {
+                      "text":  "type",
+                      "startMs":  2231
+                  },
+                  {
+                      "text":  "an",
+                      "startMs":  2562
+                  },
+                  {
+                      "text":  "amount",
+                      "startMs":  2679
+                  },
+                  {
+                      "text":  "tap",
+                      "startMs":  3699
+                  },
+                  {
+                      "text":  "pay",
+                      "startMs":  4029
+                  },
+                  {
+                      "text":  "Two",
+                      "startMs":  5394
+                  },
+                  {
+                      "text":  "seconds",
+                      "startMs":  5607
+                  },
+                  {
+                      "text":  "No",
+                      "startMs":  7433
+                  },
+                  {
+                      "text":  "fee",
+                      "startMs":  7695
+                  }
+              ],
+    "scene":  1,
+    "text":  "You scan a QR code, type an amount, tap pay. Two seconds. No fee."
+}

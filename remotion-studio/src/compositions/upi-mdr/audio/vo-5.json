@@ -1,0 +1,86 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "This",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "fee",
+                      "startMs":  378
+                  },
+                  {
+                      "text":  "is",
+                      "startMs":  681
+                  },
+                  {
+                      "text":  "called",
+                      "startMs":  860
+                  },
+                  {
+                      "text":  "MDR",
+                      "startMs":  1281
+                  },
+                  {
+                      "text":  "It\u0027s",
+                      "startMs":  3189
+                  },
+                  {
+                      "text":  "not",
+                      "startMs":  3451
+                  },
+                  {
+                      "text":  "a",
+                      "startMs":  3706
+                  },
+                  {
+                      "text":  "tax",
+                      "startMs":  3775
+                  },
+                  {
+                      "text":  "It\u0027s",
+                      "startMs":  5456
+                  },
+                  {
+                      "text":  "shared",
+                      "startMs":  5711
+                  },
+                  {
+                      "text":  "between",
+                      "startMs":  6103
+                  },
+                  {
+                      "text":  "banks",
+                      "startMs":  6579
+                  },
+                  {
+                      "text":  "and",
+                      "startMs":  7006
+                  },
+                  {
+                      "text":  "payment",
+                      "startMs":  7213
+                  },
+                  {
+                      "text":  "apps",
+                      "startMs":  7674
+                  },
+                  {
+                      "text":  "that",
+                      "startMs":  8081
+                  },
+                  {
+                      "text":  "run",
+                      "startMs":  8301
+                  },
+                  {
+                      "text":  "the",
+                      "startMs":  8570
+                  },
+                  {
+                      "text":  "infrastructure",
+                      "startMs":  8701
+                  }
+              ],
+    "scene":  5,
+    "text":  "This fee is called MDR. It\u0027s not a tax. It\u0027s shared between banks and payment apps that run the infrastructure."
+}

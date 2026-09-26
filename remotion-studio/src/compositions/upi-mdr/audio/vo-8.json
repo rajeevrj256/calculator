@@ -1,0 +1,82 @@
+﻿{
+    "words":  [
+                  {
+                      "text":  "Why",
+                      "startMs":  116
+                  },
+                  {
+                      "text":  "charge",
+                      "startMs":  358
+                  },
+                  {
+                      "text":  "anything",
+                      "startMs":  826
+                  },
+                  {
+                      "text":  "Running",
+                      "startMs":  2507
+                  },
+                  {
+                      "text":  "UPI",
+                      "startMs":  2886
+                  },
+                  {
+                      "text":  "costs",
+                      "startMs":  3437
+                  },
+                  {
+                      "text":  "money",
+                      "startMs":  3975
+                  },
+                  {
+                      "text":  "Servers",
+                      "startMs":  5463
+                  },
+                  {
+                      "text":  "security",
+                      "startMs":  6648
+                  },
+                  {
+                      "text":  "fraud",
+                      "startMs":  7950
+                  },
+                  {
+                      "text":  "checks",
+                      "startMs":  8288
+                  },
+                  {
+                      "text":  "on",
+                      "startMs":  8673
+                  },
+                  {
+                      "text":  "every",
+                      "startMs":  8894
+                  },
+                  {
+                      "text":  "tap",
+                      "startMs":  9252
+                  },
+                  {
+                      "text":  "You",
+                      "startMs":  10782
+                  },
+                  {
+                      "text":  "never",
+                      "startMs":  10954
+                  },
+                  {
+                      "text":  "see",
+                      "startMs":  11298
+                  },
+                  {
+                      "text":  "the",
+                      "startMs":  11601
+                  },
+                  {
+                      "text":  "charge",
+                      "startMs":  11732
+                  }
+              ],
+    "scene":  8,
+    "text":  "Why charge anything? Running UPI costs money. Servers, security, fraud checks on every tap. You never see the charge."
+}
