@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import TypeVar
 
@@ -91,11 +92,16 @@ def _ask_claude_code(model: str, system: str, prompt: str, schema: type[T], imag
     if allow_web:
         tools += ["WebSearch", "WebFetch"]
 
+    # The prompt goes in on stdin and the system prompt from a file: Windows caps a
+    # command line at ~32k characters, and long fact-check prompts come close.
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", encoding="utf-8", delete=False) as fh:
+        fh.write(system)
+        system_file = fh.name
     cmd = [
-        claude, "-p", prompt,
+        claude, "-p",
         "--output-format", "json",
         "--json-schema", json.dumps(schema.model_json_schema()),
-        "--append-system-prompt", system,
+        "--append-system-prompt-file", system_file,
     ]
     if model:
         cmd += ["--model", model]
@@ -106,14 +112,20 @@ def _ask_claude_code(model: str, system: str, prompt: str, schema: type[T], imag
         cmd += ["--allowedTools", *tools]
 
     log.info("Asking Claude Code (%s)%s", model or "default model", " with web search" if allow_web else "")
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=cwd,
-                          stdin=subprocess.DEVNULL)
-    if proc.returncode != 0 and not proc.stdout.strip():
-        raise LLMError(f"claude CLI failed ({proc.returncode}): {proc.stderr.strip()[:500]}")
     try:
-        out = json.loads(proc.stdout)
+        # Always UTF-8: Windows would otherwise decode with its legacy code page, fail on
+        # characters like ₹ or emoji, and hand back no output at all.
+        proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=900, cwd=cwd)
+    finally:
+        Path(system_file).unlink(missing_ok=True)
+    stdout, stderr = proc.stdout or "", proc.stderr or ""
+    if proc.returncode != 0 and not stdout.strip():
+        raise LLMError(f"claude CLI failed ({proc.returncode}): {stderr.strip()[:500]}")
+    try:
+        out = json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise LLMError(f"claude CLI returned non-JSON output: {proc.stdout[:300]}") from exc
+        raise LLMError(f"claude CLI returned non-JSON output: {stdout[:300]}") from exc
     if out.get("is_error"):
         raise LLMError(f"Claude Code error: {out.get('result') or out.get('subtype')}")
 

@@ -115,8 +115,9 @@ def fact_check_script(script: ReelScript, cfg: Config) -> VerifyResult:
 # ---------- 2. technical ----------
 
 def _ffmpeg(args: list[str]) -> str:
-    proc = subprocess.run([FFMPEG, "-hide_banner", *args], capture_output=True, text=True, timeout=300)
-    return proc.stderr
+    proc = subprocess.run([FFMPEG, "-hide_banner", *args], capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=300)
+    return proc.stderr or ""
 
 
 def probe(video: Path) -> dict:
